@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snäckdesign – Snäckmageddon</title>
+<style>
+  :root { --bg:#f4efe6; --card:#fffaf2; --ink:#2b2118; --muted:#7a6a5a; --line:#e2d7c6; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding: 28px 24px 8px; max-width: 1100px; margin: 0 auto; }
+  h1 { margin:0 0 6px; font-size: 28px; }
+  header p { margin:0; color: var(--muted); max-width: 70ch; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px 24px 48px; display:grid; gap:18px; }
+  .card { background: var(--card); border:1px solid var(--line); border-radius: 14px; padding: 18px 20px; display:grid; grid-template-columns: 1fr; gap: 10px; }
+  @media (min-width: 760px) { .card { grid-template-columns: 300px 1fr; align-items:center; } }
+  .card h2 { margin:0; font-size: 18px; display:flex; align-items:center; gap:10px; }
+  .card h2 .num { display:inline-grid; place-items:center; width:26px; height:26px; border-radius:50%; background:var(--ink); color:#fff; font-size:13px; }
+  .card p { margin:6px 0 0; color: var(--muted); font-size: 14px; line-height:1.45; }
+  .card .tags { margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; }
+  .tag { font-size: 11px; padding:3px 8px; border-radius:999px; background:#efe6d6; color:#5a4a3a; }
+  canvas { width:100%; height:auto; display:block; border-radius: 10px; background: linear-gradient(#bfe3ff, #eaf6ff 60%, #7ccf7c 60%, #5aa85a); }
+  .controls { display:flex; gap:10px; align-items:center; margin-top: 4px; font-size: 14px; color: var(--muted); }
+  .controls label { display:flex; gap:6px; align-items:center; cursor:pointer; }
+  footer { max-width:1100px; margin:0 auto; padding: 0 24px 40px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Snäckdesign – fem förslag</h1>
+  <p>Samma snäcka i alla fyra lagfärger, ritad direkt med spelets sprite-kod. Den stil ni väljer blir standard i spelet (alla stilar går att byta i menyn). Muspekaren styr vart ögonen tittar.</p>
+  <div class="controls">
+    <label><input type="checkbox" id="walk" checked> Gå-animation</label>
+    <label>Skala <input type="range" id="zoom" min="2" max="6" step="0.5" value="4"></label>
+  </div>
+</header>
+<main id="main"></main>
+<footer>Sprite-koden ligger i <code>js/snails.js</code>. Varje stil är ~60–120 rader canvas-ritning och renderas i realtid, så färger och detaljer är enkla att justera.</footer>
+<script type="module">
+  import { drawSnail, SNAIL_STYLES, TEAM_COLORS } from '../js/snails.js';
+  const main = document.getElementById('main');
+  const cards = [];
+  SNAIL_STYLES.forEach((st, i) => {
+    const card = document.createElement('section');
+    card.className = 'card';
+    card.innerHTML = `
+      <div>
+        <h2><span class="num">${i + 1}</span>${st.name}</h2>
+        <p>${st.blurb}</p>
+        <div class="tags"><span class="tag">id: ${st.id}</span></div>
+      </div>
+      <canvas width="900" height="260"></canvas>`;
+    main.appendChild(card);
+    cards.push({ style: st.id, canvas: card.querySelector('canvas') });
+  });
+  const walk = document.getElementById('walk');
+  const zoomEl = document.getElementById('zoom');
+  let mouse = { x: 0, y: 0 };
+  addEventListener('pointermove', (e) => (mouse = { x: e.clientX, y: e.clientY }));
+  function frame(ms) {
+    const t = ms / 1000;
+    const zoom = +zoomEl.value;
+    for (const c of cards) {
+      const ctx = c.canvas.getContext('2d');
+      const { width: W, height: H } = c.canvas;
+      ctx.clearRect(0, 0, W, H);
+      const rect = c.canvas.getBoundingClientRect();
+      const sx = W / rect.width, sy = H / rect.height;
+      const mx = (mouse.x - rect.left) * sx, my = (mouse.y - rect.top) * sy;
+      const groundY = H * 0.6 + 4;
+      TEAM_COLORS.forEach((tc, k) => {
+        const x = W * (0.14 + k * 0.24);
+        const facing = k % 2 === 0 ? 1 : -1;
+        const aim = Math.atan2(-(my - (groundY - 30 * zoom)), (mx - x) * facing);
+        drawSnail(ctx, c.style, {
+          x, y: groundY, facing, color: tc.hex, scale: zoom, t: t + k,
+          walking: walk.checked, aim: Math.max(-1.2, Math.min(1.2, aim)),
+        });
+      });
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>

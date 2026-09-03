@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5fb0ea"/><stop offset="1" stop-color="#bfe3ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="26" fill="url(#sky)"/>
+  <path d="M0 96 Q32 80 64 92 T128 90 V128 H0Z" fill="#3f8f3b"/>
+  <path d="M0 102 Q32 86 64 98 T128 96 V128 H0Z" fill="#6e4324"/>
+  <!-- foot -->
+  <path d="M22 96 Q20 86 32 86 L84 84 Q100 82 98 92 Q98 96 90 96 Z" fill="#e0a878" stroke="#4a2e1c" stroke-width="3" stroke-linejoin="round"/>
+  <!-- head -->
+  <path d="M60 88 Q66 62 84 62 Q100 62 96 78 Q94 88 82 88 Z" fill="#e0a878" stroke="#4a2e1c" stroke-width="3" stroke-linejoin="round"/>
+  <!-- shell -->
+  <circle cx="50" cy="60" r="30" fill="#e2453c" stroke="#4a2e1c" stroke-width="3.5"/>
+  <path d="M50 60 m-3 0 a3 3 0 0 1 6 0 a8 8 0 0 1 -14 4 a15 15 0 0 1 22 -14 a22 22 0 0 1 -12 32" fill="none" stroke="#fff3d6" stroke-width="5" stroke-linecap="round"/>
+  <ellipse cx="38" cy="44" rx="7" ry="4" fill="#fff" opacity=".4" transform="rotate(-30 38 44)"/>
+  <!-- eye stalks -->
+  <path d="M82 64 Q84 50 88 40" stroke="#e0a878" stroke-width="6" stroke-linecap="round" fill="none"/>
+  <path d="M92 64 Q98 52 104 44" stroke="#e0a878" stroke-width="6" stroke-linecap="round" fill="none"/>
+  <circle cx="88" cy="38" r="9" fill="#fff" stroke="#4a2e1c" stroke-width="2.5"/>
+  <circle cx="104" cy="42" r="9" fill="#fff" stroke="#4a2e1c" stroke-width="2.5"/>
+  <circle cx="90" cy="38" r="4" fill="#1b1b1b"/>
+  <circle cx="106" cy="42" r="4" fill="#1b1b1b"/>
+  <!-- bazooka -->
+  <rect x="58" y="70" width="46" height="9" rx="4" fill="#444" transform="rotate(-20 58 70)"/>
+</svg>
