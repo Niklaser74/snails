@@ -568,6 +568,34 @@ export class Game {
     return null;
   }
 
+  // Points along the predicted path for the current aim/power (human aiming aid).
+  previewPath(s, weaponId, power) {
+    const w = WEAPON_BY_ID[weaponId];
+    const h = this.headPos(s), d = this.aimDir(s);
+    const pts = [];
+    if (weaponId === 'salt') {
+      pts.push({ x: h.x + d.x * 14, y: h.y + d.y * 14 });
+      let x = h.x + d.x * 14, y = h.y + d.y * 14;
+      for (let i = 0; i < w.range; i += 2) {
+        x += d.x * 2; y += d.y * 2;
+        if (this.terrain.solid(x, y) || this.snailAt(x, y, s)) break;
+      }
+      pts.push({ x, y });
+      return pts;
+    }
+    if (!w.speed) return pts;
+    const p = { type: weaponId, x: h.x + d.x * 18, y: h.y + d.y * 18, vx: d.x * w.speed * power, vy: d.y * w.speed * power, fuse: 0, age: 0, owner: s, rest: false };
+    const dt = 1 / 60;
+    const maxSteps = weaponId === 'granat' ? 75 : 110;
+    for (let i = 0; i < maxSteps; i++) {
+      if (i % 3 === 0) pts.push({ x: p.x, y: p.y });
+      const r = this.stepProjectile(p, dt, true);
+      if (r === 'explode' || (weaponId === 'granat' && (p.rest || Math.abs(p.vx) + Math.abs(p.vy) < 60 && i > 5))) { pts.push({ x: p.x, y: p.y, hit: true }); break; }
+      if (r === 'remove') break;
+    }
+    return pts;
+  }
+
   planShot(s, target) {
     const facing = Math.sign(target.x - s.x) || s.facing;
     let best = null;
@@ -752,10 +780,34 @@ export class Game {
       }
     }
 
-    // aim crosshair
+    // aim crosshair + trajectory preview
     const a = this.active;
     if (a && a.alive && this.phase === 'aim' && !this.hasFired) {
       const h = this.headPos(a), d = this.aimDir(a);
+      if (!this.ai) {
+        const pw = this.charging ? Math.max(0.15, this.power) : 0.65;
+        const pts = this.previewPath(a, this.weaponId, pw);
+        if (this.weaponId === 'salt' && pts.length === 2) {
+          ctx.setLineDash([4, 6]);
+          ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); ctx.lineTo(pts[1].x, pts[1].y); ctx.stroke();
+          ctx.setLineDash([]);
+        } else {
+          const n = pts.length;
+          pts.forEach((pt, i) => {
+            const k = 1 - i / Math.max(1, n);
+            if (pt.hit) {
+              ctx.strokeStyle = 'rgba(255,90,60,0.9)';
+              ctx.lineWidth = 1.5;
+              ctx.beginPath(); ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2); ctx.stroke();
+              return;
+            }
+            ctx.fillStyle = `rgba(255,255,255,${(0.25 + 0.6 * k).toFixed(2)})`;
+            ctx.beginPath(); ctx.arc(pt.x, pt.y, 1.8 + 1.2 * k, 0, Math.PI * 2); ctx.fill();
+          });
+        }
+      }
       const cx = h.x + d.x * 48, cy = h.y + d.y * 48;
       ctx.strokeStyle = 'rgba(255,255,255,0.9)';
       ctx.lineWidth = 1.5;
