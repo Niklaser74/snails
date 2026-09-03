@@ -23,7 +23,8 @@ function loadSettings() {
 function saveSettings(s) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(s)); } catch { /* ignore */ }
 }
-const settings = Object.assign({ teams: 2, per: 3, style: 'cartoon', rows: [] }, loadSettings());
+const DEFAULT_STYLE = 'cartoon'; // vald standarddesign: Tecknad (Worms-stil)
+const settings = Object.assign({ teams: 2, per: 3, style: DEFAULT_STYLE, rows: [] }, loadSettings());
 
 const styleSel = $('opt-style');
 for (const st of SNAIL_STYLES) {
