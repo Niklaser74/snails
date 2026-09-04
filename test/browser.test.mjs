@@ -42,6 +42,7 @@ async function test(name, fn) {
 // A page that collects console errors and page errors.
 async function open(url, viewport = { width: 1280, height: 720 }, extra = {}) {
   const page = await browser.newPage({ viewport, ...extra });
+  page.setDefaultTimeout(20000);
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
@@ -143,6 +144,58 @@ await test('phone portrait: touch controls and HUD do not overlap', async () => 
   await page.locator('.tbtn.fire').dispatchEvent('pointerup');
   await ticks(page, 5);
   assert.equal(await page.evaluate(() => __game.phase), 'retreat');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+await test('language switch translates the menu and default team names', async () => {
+  const { page, errors } = await open('/');
+  // headless Chromium is en-US, so the page starts in English
+  assert.equal(await page.locator('#btn-start').textContent(), 'Start match');
+  assert.equal(await page.inputValue('.team-row:nth-child(1) input'), 'Slime Gang');
+  await page.selectOption('#opt-lang', 'sv');
+  assert.equal(await page.locator('#btn-start').textContent(), 'Starta match');
+  assert.equal(await page.inputValue('.team-row:nth-child(1) input'), 'Slemligan');
+  assert.equal(await page.locator('#opt-style option').first().textContent(), 'Tecknad (Worms-stil)');
+  assert.equal(await page.evaluate(() => document.documentElement.lang), 'sv');
+  // a custom name survives a switch, a default name follows it
+  await page.fill('.team-row:nth-child(2) input', 'Mitt lag');
+  await page.selectOption('#opt-lang', 'en');
+  assert.equal(await page.inputValue('.team-row:nth-child(1) input'), 'Slime Gang');
+  assert.equal(await page.inputValue('.team-row:nth-child(2) input'), 'Mitt lag');
+  // the choice is remembered
+  await page.selectOption('#opt-lang', 'sv');
+  await page.reload();
+  await page.waitForSelector('#btn-start');
+  assert.equal(await page.locator('#btn-start').textContent(), 'Starta match');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+await test('first-match guide advances as the player walks, aims and fires', async () => {
+  const { page, errors } = await open('/?seed=4242');
+  await page.selectOption('.team-row:nth-child(2) select', 'ai');
+  await page.click('#btn-start');
+  await page.waitForFunction(() => window.__game);
+  // the guide is evaluated by the HUD updater (throttled to ~80 ms), so give it a moment after each action
+  const settle = async () => { await ticks(page, 5); await page.waitForTimeout(200); };
+  await settle();
+  const step = () => page.evaluate(() => ({ hidden: document.getElementById('tutorial').hidden, text: document.getElementById('tut-step').textContent }));
+  assert.deepEqual(await step(), { hidden: false, text: 'Step 1 of 4' });
+  await page.keyboard.down('ArrowRight'); await ticks(page, 60); await page.keyboard.up('ArrowRight'); await settle();
+  assert.equal((await step()).text, 'Step 2 of 4');
+  await page.keyboard.down('ArrowUp'); await ticks(page, 20); await page.keyboard.up('ArrowUp'); await settle();
+  assert.equal((await step()).text, 'Step 3 of 4');
+  await page.keyboard.down('Space'); await ticks(page, 20); await page.keyboard.up('Space'); await settle();
+  assert.equal((await step()).text, 'Step 4 of 4');
+  await page.click('#tut-skip');
+  assert.equal((await step()).hidden, true);
+  // done: a new match does not show the guide again
+  await page.click('#btn-menu');
+  await page.click('#btn-start');
+  await page.waitForFunction(() => window.__game);
+  await settle();
+  assert.equal((await step()).hidden, true);
   assert.deepEqual(errors, []);
   await page.close();
 });

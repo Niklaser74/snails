@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#5fb0ea">
-<meta name="description" content="Snäckmageddon – turbaserat artilleri-spel med afrikanska jättesnäckor. Spela offline som PWA.">
+<meta name="description" content="Snäckmageddon – turbaserat artilleri-spel med afrikanska jättesnäckor. Spela offline som PWA. Turn-based artillery with giant African land snails.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Snäckmageddon">
@@ -25,23 +25,27 @@
       <span id="hud-timer" class="timer">45</span>
     </div>
     <div id="hud-message" class="message"></div>
-    <button id="btn-menu" class="icon-btn" aria-label="Meny">☰</button>
-    <div class="hud-wind" title="Vind">
-      <span class="wind-label">Vind</span>
+    <button id="btn-menu" class="icon-btn" data-i18n-aria="aria.menu" aria-label="Meny">☰</button>
+    <div class="hud-wind" data-i18n-title="hud.wind" title="Vind">
+      <span class="wind-label" data-i18n="hud.wind">Vind</span>
       <div class="wind-bar"><div id="wind-fill"></div></div>
     </div>
   </div>
   <div id="hud-teams" class="hud-teams"></div>
   <div id="weapons" class="weapons"></div>
+  <div id="tutorial" class="tutorial" hidden>
+    <div class="tut-head"><span id="tut-step"></span><button id="tut-skip" class="tut-btn"></button></div>
+    <div id="tut-text" class="tut-text"></div>
+  </div>
   <div class="touch left">
-    <button class="tbtn" data-key="left" aria-label="Vänster">◀</button>
-    <button class="tbtn" data-key="right" aria-label="Höger">▶</button>
-    <button class="tbtn" data-key="jump" aria-label="Hoppa">⤴</button>
+    <button class="tbtn" data-key="left" data-i18n-aria="aria.left" aria-label="Vänster">◀</button>
+    <button class="tbtn" data-key="right" data-i18n-aria="aria.right" aria-label="Höger">▶</button>
+    <button class="tbtn" data-key="jump" data-i18n-aria="aria.jump" aria-label="Hoppa">⤴</button>
   </div>
   <div class="touch right">
-    <button class="tbtn" data-key="up" aria-label="Sikta upp">▲</button>
-    <button class="tbtn" data-key="down" aria-label="Sikta ner">▼</button>
-    <button class="tbtn fire" data-key="fire" aria-label="Skjut">SKJUT</button>
+    <button class="tbtn" data-key="up" data-i18n-aria="aria.up" aria-label="Sikta upp">▲</button>
+    <button class="tbtn" data-key="down" data-i18n-aria="aria.down" aria-label="Sikta ner">▼</button>
+    <button class="tbtn fire" data-key="fire" data-i18n="hud.fire" data-i18n-aria="hud.fire" aria-label="Skjut">SKJUT</button>
   </div>
 </div>
 
@@ -49,19 +53,20 @@
 <div id="menu" class="overlay">
   <div class="panel">
     <h1><span class="logo"></span>Snäckmageddon</h1>
-    <p class="tagline">Turbaserat artilleri med afrikanska jättesnäckor. Långsamma. Skalade. Dödliga.</p>
+    <p class="tagline" data-i18n="app.tagline">Turbaserat artilleri med afrikanska jättesnäckor. Långsamma. Skalade. Dödliga.</p>
 
     <div class="row">
-      <label>Lag <select id="opt-teams"><option>2</option><option>3</option><option>4</option></select></label>
-      <label>Snäckor per lag <select id="opt-per"><option>1</option><option>2</option><option selected>3</option><option>4</option></select></label>
-      <label>Snäckstil <select id="opt-style"></select></label>
+      <label><span data-i18n="menu.teams">Lag</span> <select id="opt-teams"><option>2</option><option>3</option><option>4</option></select></label>
+      <label><span data-i18n="menu.per">Snäckor per lag</span> <select id="opt-per"><option>1</option><option>2</option><option selected>3</option><option>4</option></select></label>
+      <label><span data-i18n="menu.style">Snäckstil</span> <select id="opt-style"></select></label>
+      <label><span data-i18n="menu.lang">Språk</span> <select id="opt-lang"></select></label>
     </div>
     <div id="team-rows" class="team-rows"></div>
     <div class="actions">
-      <button id="btn-start" class="primary">Starta match</button>
-      <a class="secondary" href="design/snails.html">Snäckdesign</a>
-      <button id="btn-help" class="secondary">Så spelar du</button>
-      <button id="btn-install" class="secondary" hidden>Installera app</button>
+      <button id="btn-start" class="primary" data-i18n="menu.start">Starta match</button>
+      <a class="secondary" href="design/snails.html" data-i18n="menu.design">Snäckdesign</a>
+      <button id="btn-help" class="secondary" data-i18n="menu.help">Så spelar du</button>
+      <button id="btn-install" class="secondary" data-i18n="menu.install" hidden>Installera app</button>
     </div>
     <p class="hint" id="offline-hint"></p>
   </div>
@@ -70,28 +75,30 @@
 <!-- HELP -->
 <div id="help" class="overlay" hidden>
   <div class="panel">
-    <h2>Så spelar du</h2>
+    <h2 data-i18n="help.title">Så spelar du</h2>
     <ul>
-      <li><b>Gå:</b> ← → eller A/D. Snäckor är långsamma, men kan <b>hoppa</b> med Enter/⤴.</li>
-      <li><b>Sikta:</b> ↑ ↓ eller W/S. <b>Skjut:</b> håll in mellanslag för att ladda kraft, släpp för att skjuta.</li>
-      <li><b>Vapen:</b> 1–6 eller Tab. Bazooka påverkas av vinden. Granaten studsar och smäller efter 3 s. Saltsprutan gör kort, spridd skada (salt är snäckors värsta fiende). Dynamit läggs vid fötterna – krypa iväg!</li>
-      <li><b>Slemklot</b> klibbar fast där det landar, även på en snäcka, och smäller efter 2 s. <b>Saltregn</b> siktas med en markör: ← → flyttar markören, skjut släpper fem saltkristaller från himlen. Dynamit, slemklot och saltregn har begränsad ammunition (siffran på knappen).</li>
-      <li><b>Lådor</b> faller ner mellan dragen. Gå fram till en landad låda för att plocka upp den: hälsolådor ger +35, vapenlådor extra ammunition. Lådor i en explosion smäller själva.</li>
-      <li><b>Turordning:</b> 45 sekunder per drag. Efter skottet får du 4 sekunder att retirera.</li>
-      <li><b>Kamera:</b> dra med musen/fingret för att panorera, scrolla eller nyp för att zooma.</li>
-      <li><b>Plötslig död:</b> efter 16 drag börjar vattnet stiga.</li>
+      <li data-i18n-html="help.1"></li>
+      <li data-i18n-html="help.2"></li>
+      <li data-i18n-html="help.3"></li>
+      <li data-i18n-html="help.4"></li>
+      <li data-i18n-html="help.5"></li>
+      <li data-i18n-html="help.6"></li>
+      <li data-i18n-html="help.7"></li>
     </ul>
-    <div class="actions"><button id="btn-help-close" class="primary">Stäng</button></div>
+    <div class="actions">
+      <button id="btn-help-close" class="primary" data-i18n="help.close">Stäng</button>
+      <button id="btn-guide" class="secondary" data-i18n="help.guide">Visa guiden igen</button>
+    </div>
   </div>
 </div>
 
 <!-- GAME OVER -->
 <div id="gameover" class="overlay" hidden>
   <div class="panel">
-    <h2 id="go-title">Matchen är slut</h2>
+    <h2 id="go-title" data-i18n="go.title">Matchen är slut</h2>
     <div class="actions">
-      <button id="btn-again" class="primary">Spela igen</button>
-      <button id="btn-tomenu" class="secondary">Till menyn</button>
+      <button id="btn-again" class="primary" data-i18n="go.again">Spela igen</button>
+      <button id="btn-tomenu" class="secondary" data-i18n="go.menu">Till menyn</button>
     </div>
   </div>
 </div>

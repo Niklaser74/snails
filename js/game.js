@@ -231,11 +231,11 @@ export class Game {
     this.cam.target = s;
     if (this.turnCount > SUDDEN_DEATH_TURN) {
       this.waterY -= 7;
-      this.say(`Vattnet stiger! ${team.name}: ${s.name}`, 2.5);
+      this.say({ key: 'msg.sudden', team: team.name, name: s.name }, 2.5);
     } else if (crate) {
-      this.say(crate.type === 'health' ? 'En hälsolåda faller!' : 'En vapenlåda faller!', 2.5);
+      this.say({ key: crate.type === 'health' ? 'msg.crateHealth' : 'msg.crateWeapon' }, 2.5);
     } else {
-      this.say(`${team.name} – ${s.name}`, 2);
+      this.say({ key: 'msg.turn', team: team.name, name: s.name }, 2);
     }
     sfx.turn();
     this.hooks.onTurn?.(this);
@@ -278,11 +278,11 @@ export class Game {
         const team = this.teams[s.team];
         if (c.type === 'health') {
           s.hp = Math.min(100, s.hp + 35);
-          this.say(`${s.name} +35 hälsa`, 1.6);
+          this.say({ key: 'msg.heal', name: s.name }, 1.6);
           if (!this.headless) this.popups.push({ x: s.x, y: s.y - 40, text: '+35', life: 1.3, color: '#6cc25a' });
         } else {
           team.ammo[c.weapon] += 1;
-          this.say(`${s.name} hittade ${WEAPON_BY_ID[c.weapon].name}!`, 1.8);
+          this.say({ key: 'msg.found', name: s.name, weapon: c.weapon }, 1.8);
           if (!this.headless) this.popups.push({ x: s.x, y: s.y - 40, text: WEAPON_BY_ID[c.weapon].icon, life: 1.3, color: '#fff' });
         }
         sfx.crate();
@@ -294,12 +294,13 @@ export class Game {
     this.phase = 'over';
     this.active = null;
     this.winner = winner || null;
-    this.say(winner ? `${winner.name} vinner!` : 'Oavgjort – alla snäckor är borta', 99);
+    this.say(winner ? { key: 'msg.win', name: winner.name } : { key: 'msg.draw' }, 99);
     sfx.win();
     this.hooks.onGameOver?.(winner);
   }
 
-  say(text, t = 2) { this.message = text; this.messageTimer = t; }
+  // Messages are { key, ...params } objects; the UI translates them (js/i18n.js).
+  say(msg, t = 2) { this.message = msg; this.messageTimer = t; }
 
   // UI weapon choice. It becomes an input and is applied by the simulation.
   selectWeapon(id) {
@@ -359,7 +360,7 @@ export class Game {
   killSnail(s) {
     s.alive = false;
     s.hp = 0;
-    this.say(`${s.name} sprack!`, 1.5);
+    this.say({ key: 'msg.cracked', name: s.name }, 1.5);
     this.explosion(s.x, s.y - 8, 30, 28, null);
     this.cam.target = s;
   }
@@ -488,7 +489,7 @@ export class Game {
   drown(s) {
     if (!s.alive) return;
     s.alive = false; s.hp = 0; s.airborne = false;
-    this.say(`${s.name} drunknade!`, 1.6);
+    this.say({ key: 'msg.drowned', name: s.name }, 1.6);
     sfx.splash();
     if (this.headless) return;
     for (let i = 0; i < 18; i++) this.particles.push({
@@ -658,7 +659,7 @@ export class Game {
         this.projectiles.splice(i, 1);
         if (p.y > this.waterY) {
           sfx.splash();
-          this.say('Plums!', 1);
+          this.say({ key: 'msg.splash' }, 1);
           if (!this.headless) for (let k = 0; k < 10; k++) this.particles.push({ x: p.x, y: this.waterY, vx: (this.vrng() - 0.5) * 150, vy: -100 - this.vrng() * 200, life: 0.6, r: 2 + this.vrng() * 2, color: '#a8d8ff', grav: 1 });
         }
       }
@@ -1224,7 +1225,7 @@ export class Game {
       weapon: this.weaponId,
       power: this.power,
       charging: this.charging,
-      message: this.messageTimer > 0 ? this.message : '',
+      message: this.messageTimer > 0 ? this.message : null,
       teams: this.teams.map((t) => ({ name: t.name, color: t.color, hp: t.snails.reduce((a, s) => a + (s.alive ? s.hp : 0), 0), alive: t.snails.filter((s) => s.alive).length })),
       ai: !!this.ai,
       turn: this.turnCount,

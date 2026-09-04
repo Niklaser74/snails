@@ -1,6 +1,7 @@
 import { Game, WEAPONS, TICK } from './game.js';
 import { SNAIL_STYLES, TEAM_COLORS } from './snails.js';
 import { unlockAudio } from './audio.js';
+import { LANGS, t, fmt, setLang, getLang, detectLang, applyDom } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -9,14 +10,14 @@ const menu = $('menu');
 const help = $('help');
 const gameover = $('gameover');
 
-const DEFAULT_TEAM_NAMES = ['Slemligan', 'Skalbaggarna', 'Salta Hundar', 'Turbosniglarna'];
 const LS_KEY = 'snackmageddon.settings';
 
 let game = null;
 let lastTs = 0;
 let hudLast = 0;
+let tutorial = null; // active first-match guide, see startTutorial()
 
-// ---------- settings / menu ----------
+// ---------- settings ----------
 function loadSettings() {
   try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { return {}; }
 }
@@ -24,17 +25,68 @@ function saveSettings(s) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(s)); } catch { /* ignore */ }
 }
 const DEFAULT_STYLE = 'cartoon'; // vald standarddesign: Tecknad (Worms-stil)
-const settings = Object.assign({ teams: 2, per: 3, style: DEFAULT_STYLE, rows: [] }, loadSettings());
+const settings = Object.assign({ teams: 2, per: 3, style: DEFAULT_STYLE, rows: [], lang: null, tutorialDone: false }, loadSettings());
+
+// ---------- language ----------
+setLang(settings.lang || detectLang());
+const langSel = $('opt-lang');
+for (const [id, name] of Object.entries(LANGS)) {
+  const o = document.createElement('option');
+  o.value = id; o.textContent = name;
+  langSel.appendChild(o);
+}
+langSel.value = getLang();
+
+const defaultTeamName = (i, lang = getLang()) => {
+  const cur = getLang();
+  setLang(lang);
+  const name = t('team.' + i);
+  setLang(cur);
+  return name;
+};
+const isDefaultTeamName = (name, i) => Object.keys(LANGS).some((l) => defaultTeamName(i, l) === name);
 
 const styleSel = $('opt-style');
-for (const st of SNAIL_STYLES) {
-  const o = document.createElement('option');
-  o.value = st.id; o.textContent = st.name;
-  styleSel.appendChild(o);
+function renderStyleOptions() {
+  const cur = styleSel.value || settings.style;
+  styleSel.innerHTML = '';
+  for (const st of SNAIL_STYLES) {
+    const o = document.createElement('option');
+    o.value = st.id; o.textContent = t('style.' + st.id);
+    styleSel.appendChild(o);
+  }
+  styleSel.value = cur;
 }
-styleSel.value = settings.style;
+
+function applyLanguage() {
+  applyDom();
+  renderStyleOptions();
+  // team names that are still the default of some language follow the language switch
+  document.querySelectorAll('.team-row').forEach((row, i) => {
+    const input = row.querySelector('input');
+    if (isDefaultTeamName(input.value.trim(), i)) input.value = defaultTeamName(i);
+    row.querySelector('input').setAttribute('aria-label', t('menu.teamName'));
+    const sel = row.querySelector('select');
+    sel.setAttribute('aria-label', t('menu.player'));
+    sel.options[0].textContent = t('menu.human');
+    sel.options[1].textContent = t('menu.ai');
+  });
+  for (const b of $('weapons').children) b.title = t('weapon.' + b.dataset.id);
+  if ($('offline-hint').dataset.ready) $('offline-hint').textContent = t('menu.offline');
+  renderTutorial();
+}
+langSel.addEventListener('change', () => {
+  settings.lang = langSel.value;
+  setLang(settings.lang);
+  saveSettings(settings);
+  applyLanguage();
+});
+
+// ---------- menu ----------
 $('opt-teams').value = settings.teams;
 $('opt-per').value = settings.per;
+renderStyleOptions();
+styleSel.value = settings.style;
 
 function renderTeamRows() {
   const n = +$('opt-teams').value;
@@ -44,20 +96,23 @@ function renderTeamRows() {
     const saved = settings.rows[i] || {};
     const row = document.createElement('div');
     row.className = 'team-row';
+    const name = saved.name && !isDefaultTeamName(saved.name, i) ? saved.name : defaultTeamName(i);
     row.innerHTML = `
       <div class="swatch" style="background:${TEAM_COLORS[i].hex}"></div>
-      <input type="text" maxlength="16" value="${saved.name || DEFAULT_TEAM_NAMES[i]}" aria-label="Lagnamn">
-      <select aria-label="Spelare"><option value="human">Människa</option><option value="ai">Dator</option></select>`;
+      <input type="text" maxlength="16" aria-label="${t('menu.teamName')}">
+      <select aria-label="${t('menu.player')}"><option value="human">${t('menu.human')}</option><option value="ai">${t('menu.ai')}</option></select>`;
+    row.querySelector('input').value = name;
     row.querySelector('select').value = saved.ai ? 'ai' : i === 0 ? 'human' : 'ai';
     box.appendChild(row);
   }
 }
 renderTeamRows();
+applyLanguage();
 $('opt-teams').addEventListener('change', renderTeamRows);
 
 function readConfig() {
   const rows = [...document.querySelectorAll('.team-row')].map((r, i) => ({
-    name: r.querySelector('input').value.trim() || DEFAULT_TEAM_NAMES[i],
+    name: r.querySelector('input').value.trim() || defaultTeamName(i),
     color: TEAM_COLORS[i].hex,
     ai: r.querySelector('select').value === 'ai',
   }));
@@ -78,7 +133,7 @@ function startGame() {
   game = new Game(canvas, cfg, {
     onGameOver: (winner) => {
       setTimeout(() => {
-        $('go-title').textContent = winner ? `${winner.name} vinner!` : 'Oavgjort!';
+        $('go-title').textContent = winner ? t('go.win', { name: winner.name }) : t('go.draw');
         gameover.hidden = false;
       }, 2000);
     },
@@ -91,21 +146,64 @@ function startGame() {
   hud.hidden = false;
   lastTs = performance.now();
   acc = 0;
+  if (!settings.tutorialDone && cfg.teams.some((tm) => !tm.ai)) startTutorial(); else endTutorial(false);
   tryFullscreen();
 }
 
+function toMenu() {
+  gameover.hidden = true;
+  hud.hidden = true;
+  menu.hidden = false;
+  game = null;
+  window.__game = null;
+}
 $('btn-start').addEventListener('click', startGame);
 $('btn-help').addEventListener('click', () => (help.hidden = false));
 $('btn-help-close').addEventListener('click', () => (help.hidden = true));
+$('btn-guide').addEventListener('click', () => { settings.tutorialDone = false; saveSettings(settings); help.hidden = true; });
 $('btn-again').addEventListener('click', startGame);
-$('btn-tomenu').addEventListener('click', () => { gameover.hidden = true; hud.hidden = true; menu.hidden = false; game = null; });
-$('btn-menu').addEventListener('click', () => { hud.hidden = true; menu.hidden = false; game = null; });
+$('btn-tomenu').addEventListener('click', toMenu);
+$('btn-menu').addEventListener('click', toMenu);
 
 function tryFullscreen() {
   const el = document.documentElement;
   if (matchMedia('(pointer: coarse)').matches && el.requestFullscreen && !document.fullscreenElement) {
     el.requestFullscreen().catch(() => {});
   }
+}
+
+// ---------- tutorial ----------
+// A four-step guide shown during the player's first match. Each step completes
+// when the player actually does the thing.
+function startTutorial() {
+  tutorial = { step: 1, x0: null, aim0: null, snail: null, turnAt4: null };
+  renderTutorial();
+}
+function endTutorial(done) {
+  if (done) { settings.tutorialDone = true; saveSettings(settings); }
+  tutorial = null;
+  $('tutorial').hidden = true;
+}
+function renderTutorial() {
+  const box = $('tutorial');
+  if (!tutorial) { box.hidden = true; return; }
+  $('tut-step').textContent = t('tut.step', { n: tutorial.step });
+  $('tut-text').textContent = t('tut.' + tutorial.step);
+  $('tut-skip').textContent = tutorial.step === 4 ? t('tut.done') : t('tut.skip');
+}
+$('tut-skip').addEventListener('click', () => endTutorial(true));
+function updateTutorial() {
+  if (!tutorial || !game) return;
+  const s = game.active;
+  const box = $('tutorial');
+  if (!s || game.ai || game.phase === 'over') { box.hidden = true; return; }
+  if (tutorial.snail !== s) { tutorial.snail = s; tutorial.x0 = s.x; tutorial.aim0 = s.aim; }
+  const before = tutorial.step;
+  if (tutorial.step === 1 && Math.abs(s.x - tutorial.x0) > 30) tutorial.step = 2;
+  else if (tutorial.step === 2 && Math.abs(s.aim - tutorial.aim0) > 0.25) tutorial.step = 3;
+  else if (tutorial.step === 3 && game.hasFired) { tutorial.step = 4; tutorial.turnAt4 = game.turnCount; }
+  else if (tutorial.step === 4 && game.turnCount > tutorial.turnAt4 && game.phase === 'aim') { endTutorial(true); return; }
+  if (tutorial.step !== before || box.hidden) { box.hidden = false; renderTutorial(); }
 }
 
 // ---------- weapons bar ----------
@@ -116,7 +214,7 @@ function buildWeaponBar() {
     const b = document.createElement('button');
     b.dataset.id = w.id;
     b.innerHTML = `${w.icon}<small>${i + 1}</small><span class="ammo"></span>`;
-    b.title = w.name;
+    b.title = t('weapon.' + w.id);
     b.addEventListener('pointerdown', (e) => { e.preventDefault(); game?.selectWeapon(w.id); });
     box.appendChild(b);
   });
@@ -132,7 +230,8 @@ addEventListener('keydown', (e) => {
   if (!game || !menu.hidden) return;
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
   const k = keyMap[e.code];
-  if (k) { if (!game.ai || k === 'fire') { /* humans only */ } if (!game.ai) game.input[k] = true; e.preventDefault(); }
+  if (k) { if (!game.ai) game.input[k] = true; e.preventDefault(); }
+  if (e.code === 'Escape') { toMenu(); return; }
   if (game.ai || game.replay) return;
   if (/^Digit[1-6]$/.test(e.code)) game.selectWeapon(WEAPONS[+e.code[5] - 1].id);
   if (e.code === 'Tab') {
@@ -144,14 +243,13 @@ addEventListener('keydown', (e) => {
       if (ammo[WEAPONS[i].id] > 0) { game.selectWeapon(WEAPONS[i].id); break; }
     }
   }
-  if (e.code === 'Escape') { $('btn-menu').click(); }
 });
 addEventListener('keyup', (e) => {
   if (!game) return;
   const k = keyMap[e.code];
   if (k && !game.ai) game.input[k] = false;
 });
-addEventListener('blur', () => { if (game) for (const k in game.input) game.input[k] = false; });
+addEventListener('blur', () => { if (game) for (const k in game.input) if (k !== 'weapon') game.input[k] = false; });
 
 // touch buttons
 for (const b of document.querySelectorAll('.tbtn')) {
@@ -213,11 +311,11 @@ function updateHud(now) {
   hudLast = now;
   const st = game.hudState();
   const team = $('hud-team');
-  if (st.team) { team.textContent = `${st.team.name} · ${st.snail?.name ?? ''}${st.ai ? ' (dator)' : ''}`; team.style.background = st.team.color; }
+  if (st.team) { team.textContent = `${st.team.name} · ${st.snail?.name ?? ''}${st.ai ? ' ' + t('hud.ai') : ''}`; team.style.background = st.team.color; }
   const timer = $('hud-timer');
   timer.textContent = st.phase === 'aim' || st.phase === 'retreat' ? Math.ceil(st.timer) : '·';
   timer.classList.toggle('low', st.phase === 'aim' && st.timer < 10);
-  $('hud-message').textContent = st.message;
+  $('hud-message').textContent = fmt(st.message);
   const w = Math.abs(st.wind) * 45;
   windFill.style.width = w + 'px';
   windFill.style.left = st.wind >= 0 ? '50%' : `calc(50% - ${w}px)`;
@@ -226,14 +324,14 @@ function updateHud(now) {
     rows.innerHTML = st.teams.map(() => '<div class="trow"><span class="tname"></span><div class="tbar"><div></div></div><span class="tcount"></span></div>').join('');
   }
   const max = 100 * (game.config.snailsPerTeam || 3);
-  st.teams.forEach((t, i) => {
+  st.teams.forEach((tm, i) => {
     const r = rows.children[i];
-    r.classList.toggle('dead', t.alive === 0);
-    r.querySelector('.tname').textContent = t.name;
+    r.classList.toggle('dead', tm.alive === 0);
+    r.querySelector('.tname').textContent = tm.name;
     const bar = r.querySelector('.tbar > div');
-    bar.style.width = (100 * t.hp) / max + '%';
-    bar.style.background = t.color;
-    r.querySelector('.tcount').textContent = `${t.alive}`;
+    bar.style.width = (100 * tm.hp) / max + '%';
+    bar.style.background = tm.color;
+    r.querySelector('.tcount').textContent = `${tm.alive}`;
   });
   for (const b of $('weapons').children) {
     const a = st.ammo ? st.ammo[b.dataset.id] : Infinity;
@@ -241,6 +339,7 @@ function updateHud(now) {
     b.querySelector('.ammo').textContent = a === Infinity ? '' : a;
     b.disabled = st.phase !== 'aim' || st.ai || !(a > 0);
   }
+  updateTutorial();
 }
 
 // ---------- loop ----------
@@ -280,7 +379,8 @@ $('btn-install').addEventListener('click', async () => {
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').then(() => {
-      $('offline-hint').textContent = 'Spelet är sparat för offline-spel.';
+      $('offline-hint').dataset.ready = '1';
+      $('offline-hint').textContent = t('menu.offline');
     }).catch(() => {});
   });
 }

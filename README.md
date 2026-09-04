@@ -1,5 +1,10 @@
 # Snäckmageddon
 
+*Snäckmageddon is a Worms-style, turn-based artillery game with giant African
+land snails, built as an installable PWA with no build step. The interface is
+available in Swedish and English (auto-detected, switchable in the menu). Play
+it at https://niklaser74.github.io/snails/.*
+
 Turbaserat artilleri-spel i Worms Armageddon-anda, fast med **afrikanska jättesnäckor**
 (Achatina) i stället för maskar. Byggt som en installerbar PWA i ren HTML/Canvas/JavaScript
 utan byggsteg eller beroenden.
@@ -39,6 +44,10 @@ sätts i `js/main.js` (`settings.style`).
 - Lådor faller ner mellan dragen: hälsa (+35) eller extra ammunition. Lådor i en
   explosion smäller själva.
 - Förstörbar terräng, fallskada, vatten som dränker, plötslig död efter 16 drag.
+- Språk: svenska eller engelska, väljs automatiskt efter webbläsaren och kan bytas i
+  menyn. All UI-text ligger i `js/i18n.js`; spelmotorn skickar meddelandenycklar.
+- Guide: en fyrstegsguide visas i första matchen (gå, sikta, skjut, reträtt) och kan
+  visas igen från hjälpdialogen.
 - Tangentbord: ← → / A D gå, ↑ ↓ / W S sikta, mellanslag ladda+skjut, Enter hoppa,
   1–6 / Tab vapen, Esc meny. Touch: knappar på skärmen, dra för att panorera, nyp för zoom.
 
@@ -80,6 +89,7 @@ js/snails.js          snäck-sprites (alla stilar)
 js/audio.js           syntetiserade ljudeffekter
 js/rng.js             seedad slump, shuffle, tillståndshash
 js/dmath.js           motoroberoende sin/cos/atan2
+js/i18n.js            ordlista svenska/engelska
 test/                 determinism- och webbläsartester (körs i CI)
 design/snails.html    designförslag
 icons/                app-ikoner
