@@ -113,6 +113,7 @@ select, input[type=text] { font: inherit; padding: 6px 8px; border-radius: 8px; 
 button.primary, button.secondary, a.secondary { font: inherit; font-weight: 700; padding: 10px 18px; border-radius: 10px; border: none; cursor: pointer; text-decoration: none; display: inline-block; }
 button.primary { background: var(--accent); color: var(--accent-ink); }
 button.secondary, a.secondary { background: #efe6d6; color: var(--ink); }
+button.danger { color: #b3261e; }
 .hint { font-size: 12px; color: #8a7a6a; margin: 12px 0 0; min-height: 1em; }
 .panel ul { padding-left: 18px; line-height: 1.5; margin: 0 0 12px; }
 .panel li { margin-bottom: 6px; }

@@ -57,6 +57,19 @@ export function initAnalytics(uiLang) {
 
 export function setAnalyticsLang(l) { lang = l; }
 
+// Report uncaught errors (at most a handful per page load) so bugs in the
+// wild show up in the usage counter instead of staying invisible.
+let errorsSent = 0;
+export function installErrorReporting() {
+  const report = (msg, src, line, stack) => {
+    if (errorsSent >= 5) return;
+    errorsSent++;
+    track('error', { msg: String(msg).slice(0, 200), src: String(src || '').slice(0, 120), line: line || 0, stack: String(stack || '').slice(0, 400), url: location.pathname + location.search.slice(0, 40) });
+  };
+  addEventListener('error', (e) => report(e.message, e.filename, e.lineno, e.error?.stack));
+  addEventListener('unhandledrejection', (e) => { const r = e.reason; report(r?.message || r, '', 0, r?.stack); });
+}
+
 // track('match_end', { turns: 12, winner: 'human' })
 export function track(event, props = {}) {
   if (!analyticsEnabled() || !sessionId) return;

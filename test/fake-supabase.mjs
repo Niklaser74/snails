@@ -52,6 +52,32 @@ export function createFakeSupabase() {
     },
     snails_save_push(uid, a) { pushes.push({ uid, endpoint: a.p_endpoint, lang: a.p_lang }); return null; },
     snails_remove_push(uid, a) { const i = pushes.findIndex((p) => p.endpoint === a.p_endpoint && p.uid === uid); if (i >= 0) pushes.splice(i, 1); return null; },
+    snails_resign(uid, a) {
+      const m = matches.get(a.p_match); if (!m) throw err('no such match');
+      const my = m.host === uid ? 0 : m.guest === uid ? 1 : null; if (my == null) throw err('not your match');
+      if (m.status === 'finished') return view(m, uid);
+      if (m.status === 'open') { matches.delete(m.id); turns.delete(m.id); return null; }
+      m.status = 'finished'; m.winner = 1 - my; m.updated_at = new Date().toISOString();
+      return view(m, uid);
+    },
+    snails_claim_timeout(uid, a) {
+      const m = matches.get(a.p_match); if (!m) throw err('no such match');
+      const my = m.host === uid ? 0 : m.guest === uid ? 1 : null; if (my == null) throw err('not your match');
+      if (m.status !== 'playing') throw err('match is not in play');
+      if (m.turn_team === my) throw err('it is your turn');
+      if (Date.now() - new Date(m.updated_at).getTime() < 14 * 86400000) throw err('opponent still has time');
+      m.status = 'finished'; m.winner = my; m.updated_at = new Date().toISOString();
+      return view(m, uid);
+    },
+    snails_rematch(uid, a) {
+      const m = matches.get(a.p_match); if (!m) throw err('no such match');
+      const my = m.host === uid ? 0 : m.guest === uid ? 1 : null; if (my == null) throw err('not your match');
+      if (m.status !== 'finished') throw err('match is not finished');
+      const other = my === 0 ? m.guest : m.host; if (!other) throw err('no opponent');
+      const n = { id: uuid(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), rules_version: a.p_rules_version, seed: 4321, config: m.config, names: { 0: m.names[my], 1: m.names[1 - my] }, host: uid, guest: other, status: 'playing', turn_team: 0, turn_count: 0, tick_count: 0, winner: null, last_hash: null };
+      matches.set(n.id, n); turns.set(n.id, []);
+      return view(n, uid);
+    },
     snails_delete_match(uid, a) { const m = matches.get(a.p_match); if (m && (m.host === uid || m.guest === uid)) { matches.delete(m.id); turns.delete(m.id); } return null; },
   };
 

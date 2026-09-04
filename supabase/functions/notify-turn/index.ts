@@ -21,10 +21,13 @@ const rest = (path: string, init: RequestInit = {}) =>
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', ...(init.headers || {}) },
   });
 
-function texts(lang: string | null, name: string) {
+type Kind = 'turn' | 'joined' | 'finished' | 'resigned' | 'timeout' | 'rematch';
+function texts(lang: string | null, name: string): Record<Kind, string> {
   return lang === 'en'
-    ? { turn: `${name} has played. Your turn!`, joined: `${name} joined your match.`, finished: `The match against ${name} is over.` }
-    : { turn: `${name} har spelat. Din tur!`, joined: `${name} gick med i din match.`, finished: `Matchen mot ${name} är slut.` };
+    ? { turn: `${name} has played. Your turn!`, joined: `${name} joined your match.`, finished: `The match against ${name} is over.`,
+        resigned: `${name} gave up. You won!`, timeout: `${name} claimed the win after 14 days of silence.`, rematch: `${name} wants a rematch!` }
+    : { turn: `${name} har spelat. Din tur!`, joined: `${name} gick med i din match.`, finished: `Matchen mot ${name} är slut.`,
+        resigned: `${name} gav upp. Du vann!`, timeout: `${name} tog hem vinsten efter 14 dagars tystnad.`, rematch: `${name} vill ha revansch!` };
 }
 
 Deno.serve(async (req) => {
@@ -44,7 +47,7 @@ Deno.serve(async (req) => {
     if (me === null) return json({ error: 'not your match' }, 403);
     const other = me === 0 ? m.guest : m.host;
     if (!other) return json({ sent: 0, reason: 'no opponent yet' });
-    const kind = event === 'joined' ? 'joined' : m.status === 'finished' ? 'finished' : 'turn';
+    const kind: Kind = ['joined', 'resigned', 'timeout', 'rematch'].includes(event) ? event : m.status === 'finished' ? 'finished' : 'turn';
     if (kind === 'turn' && m.turn_team === me) return json({ sent: 0, reason: 'still your turn' });
 
     const subs = await (await rest(`snails_push_subscriptions?user_id=eq.${other}&select=endpoint,p256dh,auth,lang`)).json();
@@ -61,7 +64,7 @@ Deno.serve(async (req) => {
     const dead: string[] = [];
     for (const s of subs) {
       const t = texts(s.lang, myName);
-      const payload = { title: s.lang === 'en' ? 'Snailmageddon' : 'Snäckmageddon', body: t[kind as 'turn' | 'joined' | 'finished'], url: `${SITE}/?match=${m.id}`, tag: `match-${m.id}` };
+      const payload = { title: s.lang === 'en' ? 'Snailmageddon' : 'Snäckmageddon', body: t[kind], url: `${SITE}/?match=${m.id}`, tag: `match-${m.id}` };
       const status = await sendPush({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, vapid, SITE).catch(() => 0);
       if (status === 201 || status === 200) sent++;
       else if (status === 404 || status === 410) dead.push(s.endpoint);

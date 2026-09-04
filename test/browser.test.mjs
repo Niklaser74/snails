@@ -305,8 +305,37 @@ await test('Snigelpost: two players trade turns through the server', async () =>
   assert.equal(aState.team, 0);
   assert.equal(aState.paused, false);
   assert.equal(aState.waiting, true);
-  // the match list in the menu shows the game with the right state
-  await a.click('#btn-menu');
+  // B gives up (two presses), A polls and sees the finished match with a rematch button
+  await b.click('#btn-wait-resign'); await b.click('#btn-wait-resign');
+  await b.waitForFunction(() => /gav upp|gave up/i.test(document.getElementById('wait-status').textContent));
+  assert.equal(fake.matches.get(matchId).status, 'finished');
+  assert.equal(fake.matches.get(matchId).winner, 0, 'host should win when guest resigns');
+  assert.ok(fake.notifies.some((n) => n.match_id === matchId && n.event === 'resigned'), 'no resign notification');
+  await a.evaluate(() => window.dispatchEvent(new Event('visibilitychange'))); // same as the 8 s poll
+  await a.waitForSelector('#gameover:not([hidden])');
+  assert.match(await a.locator('#go-title').textContent(), /vann|won/i);
+  assert.equal(await a.locator('#btn-go-rematch').isHidden(), false, 'rematch button missing');
+  // rematch: a new match with the same opponent, A plays first and gets the invite-free waiting box
+  await a.click('#btn-go-rematch');
+  await a.waitForFunction(() => window.__game && __game.seed === 4321);
+  const rematch = [...fake.matches.values()].find((m) => m.seed === 4321);
+  assert.ok(rematch && rematch.status === 'playing' && rematch.guest, 'rematch not created as a playing match');
+  assert.ok(fake.notifies.some((n) => n.match_id === rematch.id && n.event === 'rematch'), 'no rematch notification');
+  // timeout claim: after A's turn, pretend B has been silent for 15 days
+  await a.evaluate(() => { document.getElementById('waiting').hidden = true; __game.paused = false; });
+  await shoot(a);
+  await a.waitForFunction(() => /skickat|sent/i.test(document.getElementById('wait-status').textContent));
+  rematch.updated_at = new Date(Date.now() - 15 * 86400000).toISOString();
+  await a.click('#btn-wait-refresh');
+  await a.waitForTimeout(300);
+  assert.equal(await a.locator('#btn-wait-claim').isHidden(), false, 'claim button should show after 14 silent days');
+  await a.click('#btn-wait-claim');
+  await a.waitForFunction(() => /tog hem|claimed/i.test(document.getElementById('wait-status').textContent));
+  assert.equal(fake.matches.get(rematch.id).winner, 0);
+  // uncaught errors are reported to the usage counter (analytics is disabled on localhost, so check the hook is wired)
+  assert.equal(await a.evaluate(() => typeof window.onerror !== 'undefined'), true);
+  // the match list in the menu shows the games with the right state
+  await a.click('#btn-wait-menu');
   await a.waitForSelector('.mrow');
   assert.match(await a.locator('.mrow .mname').first().textContent(), /Gäst|B|…|Snail|Snäcka/);
   assert.deepEqual(errors, []);

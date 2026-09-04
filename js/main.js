@@ -4,7 +4,7 @@ import { push } from './push.js';
 import { SNAIL_STYLES, TEAM_COLORS } from './snails.js';
 import { unlockAudio } from './audio.js';
 import { LANGS, t, fmt, setLang, getLang, detectLang, applyDom } from './i18n.js';
-import { initAnalytics, track, setAnalyticsLang } from './analytics.js';
+import { initAnalytics, track, setAnalyticsLang, installErrorReporting } from './analytics.js';
 import { platform } from './platform.js';
 import { setMuted, isMuted } from './audio.js';
 
@@ -95,6 +95,7 @@ langSel.addEventListener('change', () => {
 
 // ---------- usage counter (see supabase/README.md) ----------
 initAnalytics(getLang());
+installErrorReporting();
 track('app_open', {
   installed: matchMedia('(display-mode: standalone)').matches || navigator.standalone === true,
   touch: matchMedia('(pointer: coarse)').matches,
@@ -208,6 +209,7 @@ function toMenu() {
   $('replaybar').hidden = true;
   waiting.hidden = true;
   $('btn-again').hidden = false;
+  $('btn-go-rematch').hidden = true;
   gameover.hidden = true;
   hud.hidden = true;
   menu.hidden = false;
@@ -360,6 +362,7 @@ function startOnlineGame(m) {
   if (mine && replayFrom < m.tick_count) { replayUntil = m.tick_count; $('replaybar').hidden = false; }
   else { replayUntil = 0; afterReplay(); }
   if (m.status === 'open' && m.turn_count === 0) showWaiting(); // show the invite link before the first turn
+  if (waiting.hidden) startPolling(); // a resignation or claimed win by the opponent should show up even mid-turn
   track('match_start', { teams: 2, per: m.config.snailsPerTeam, humans: 2, style: settings.style, online: true });
 }
 
@@ -384,6 +387,7 @@ function showGameOverOnline() {
   if (!m) return;
   $('go-title').textContent = m.winner == null ? t('online.draw') : m.winner === m.my_team ? t('online.won') : t('online.lost');
   $('btn-again').hidden = true;
+  $('btn-go-rematch').hidden = !m.guest;
   waiting.hidden = true;
   gameover.hidden = false;
 }
@@ -425,10 +429,16 @@ function renderWaiting() {
   const opp = m.names?.[o.myTeam === 0 ? '1' : '0'];
   const invite = $('wait-invite');
   const mine = isMyTurn(m) && !o.pending && game && game.tickCount <= o.startTick;
+  const days = snigelpost.silentDays(m);
   $('btn-wait-play').hidden = !mine;
-  $('btn-wait-refresh').hidden = mine;
+  $('btn-wait-refresh').hidden = mine || m.status === 'finished';
   renderPushBox(m);
   $('btn-wait-refresh').textContent = o.pending ? t('online.retry') : t('online.refresh');
+  $('btn-wait-resign').hidden = m.status === 'finished' || !!o.pending;
+  $('btn-wait-resign').textContent = t('online.resign');
+  resignArmed = false;
+  $('btn-wait-claim').hidden = !(days >= 14);
+  $('btn-wait-rematch').hidden = m.status !== 'finished' || !m.guest;
   if (m.status === 'open') {
     $('wait-title').textContent = t('online.inviteTitle');
     $('wait-text').textContent = t('online.inviteText');
@@ -441,10 +451,47 @@ function renderWaiting() {
     invite.hidden = true;
   } else {
     $('wait-title').textContent = t('online.theirTurn', { name: opp || '…' });
-    $('wait-text').textContent = t('online.waitText', { name: opp || '…' });
+    $('wait-text').textContent = days >= 14 ? t('online.silent', { name: opp || '…', days }) : t('online.waitText', { name: opp || '…' });
     invite.hidden = true;
   }
 }
+let resignArmed = false;
+$('btn-wait-resign').addEventListener('click', async () => {
+  const o = onlineMatch;
+  if (!o) return;
+  if (!resignArmed) { resignArmed = true; $('btn-wait-resign').textContent = t('online.resignConfirm'); return; }
+  try {
+    const m = await snigelpost.resign(o.id);
+    if (!m) { toMenu(); return; } // an invitation nobody joined was simply deleted
+    o.match = { ...o.match, ...m, turns: undefined };
+    push.notify(o.id, 'resigned');
+    $('wait-status').textContent = t('online.resigned');
+    renderWaiting();
+  } catch (e) { $('wait-status').textContent = t('online.error', { msg: e.message }); }
+});
+$('btn-wait-claim').addEventListener('click', async () => {
+  const o = onlineMatch;
+  if (!o) return;
+  try {
+    const m = await snigelpost.claimTimeout(o.id);
+    o.match = { ...o.match, ...m, turns: undefined };
+    push.notify(o.id, 'timeout');
+    $('wait-status').textContent = t('online.claimed');
+    renderWaiting();
+  } catch (e) { $('wait-status').textContent = t('online.error', { msg: e.message }); }
+});
+async function startRematch() {
+  const o = onlineMatch;
+  if (!o) return;
+  try {
+    const n = await snigelpost.rematch(o.id);
+    push.notify(n.id, 'rematch');
+    notice(t('online.rematchMade'));
+    await openMatch(n.id);
+  } catch (e) { notice(t('online.error', { msg: e.message })); }
+}
+$('btn-wait-rematch').addEventListener('click', startRematch);
+$('btn-go-rematch').addEventListener('click', startRematch);
 // "notify me" box in the waiting overlay
 let pushSub = undefined; // undefined = not checked yet
 async function renderPushBox(m) {
@@ -485,13 +532,18 @@ function startPolling() { stopPolling(); pollTimer = setInterval(() => pollMatch
 function stopPolling() { if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
 async function pollMatch(manual) {
   const o = onlineMatch;
-  if (!o || waiting.hidden || o.pending) return;
+  if (!o || o.pending || replayUntil) return;
   try {
     const m = await snigelpost.get(o.id);
     if (m.turn_count > o.match.turn_count || m.status !== o.match.status || (m.guest && !o.match.guest)) {
       stopPolling();
       startOnlineGame(m);
-    } else if (manual) $('wait-status').textContent = matchLabel(m);
+    } else {
+      // nothing new, but keep timestamps fresh (silent days, claim button) and confirm on a manual refresh
+      o.match = { ...o.match, ...m, turns: undefined };
+      if (!waiting.hidden) renderWaiting();
+      if (manual) $('wait-status').textContent = matchLabel(m);
+    }
   } catch (e) { if (manual) $('wait-status').textContent = t('online.error', { msg: e.message }); }
 }
 addEventListener('visibilitychange', () => { if (!document.hidden) pollMatch(false); });

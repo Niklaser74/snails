@@ -21,6 +21,14 @@ export const snigelpost = {
   async get(id) { return online.rpc('snails_get_match', { p_match: id }); },
   async list() { return online.rpc('snails_my_matches'); },
   async remove(id) { return online.rpc('snails_delete_match', { p_match: id }); },
+  async resign(id) { return online.rpc('snails_resign', { p_match: id }); },
+  async claimTimeout(id) { return online.rpc('snails_claim_timeout', { p_match: id }); },
+  async rematch(id) { return online.rpc('snails_rematch', { p_match: id, p_rules_version: RULES_VERSION }); },
+  // days the opponent has been silent (0 when it is our turn)
+  silentDays(match) {
+    if (!match || match.status !== 'playing' || match.turn_team === match.my_team) return 0;
+    return Math.floor((Date.now() - new Date(match.updated_at).getTime()) / 86400000);
+  },
 
   async submit(match, game, startTick, finished, winnerTeam) {
     return online.rpc('snails_submit_turn', {

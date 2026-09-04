@@ -57,9 +57,17 @@ skapar en rad i `profiles` för varje ny användare) ändrats så att den hoppar
 "Database error saving new user". Ändringen ligger som migrationen
 `handle_new_user_skip_anonymous` i projektet.
 
-Kända begränsningar i första versionen:
-- Ingen notis när det blir din tur. Väntläget pollar var åttonde sekund så länge
-  sidan är öppen. Web Push är nästa steg.
+Fler funktioner (`migrations/20260904190000_snigelpost_robust.sql`):
+- `snails_resign`: ge upp, motståndaren vinner. En öppen inbjudan raderas.
+- `snails_claim_timeout`: den som väntar tar hem vinsten när motståndaren varit
+  tyst i 14 dagar.
+- `snails_rematch`: ny match mot samma motståndare, anroparen börjar. Finns
+  redan en pågående match mellan de två returneras den.
+- `snails_cleanup`: körs av pg_cron varje natt 04:17 UTC. Raderar inbjudningar
+  ingen antagit på 30 dagar och färdiga matcher äldre än 90 dagar.
+- Händelsen `error` i `snails_events` är klientfel (max fem per sidladdning).
+
+Kända begränsningar:
 - Servern kör inte simuleringen själv; den litar på klientens hash. Motståndarens
   klient jämför sin egen hash med den sparade och varnar vid avvikelse.
 - Ett anonymt konto lever i webbläsarens localStorage. Rensas den försvinner

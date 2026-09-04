@@ -28,10 +28,10 @@ att göra det hållbart, roligare och till slut lönsamt.
 | Klart | Kvar |
 |---|---|
 | Deterministisk simulering, replay, hash | E-postkoppling av kontot (magic link) |
-| Anonyma konton, matcher, drag, inbjudan via länk | Ge upp, revansch, automatisk förlust efter 14 dagars tystnad |
+| Anonyma konton, matcher, drag, inbjudan via länk | |
 | Motståndarens drag i 3× med hoppa över | Åskådarläge och delbar replay av färdig match |
 | Push-notiser (egen Web Push, VAPID i Vault) | Serversidig verifiering av drag (edge-funktion kör simuleringen) |
-| Väntläge med automatisk uppdatering | Städjobb: gamla öppna matcher, döda prenumerationer |
+| Väntläge med automatisk uppdatering, ge upp, revansch, vinst efter tystnad, städjobb | |
 
 ### Fas 3 – Progression och identitet (ej påbörjad)
 Profil, kosmetik (intäktsytan), "Dagens skott" med topplista, rank och säsonger.
@@ -78,9 +78,8 @@ Stripe när e-postkoppling finns, sedan säsongspass och belönad reklam.
 
 ## Nästa två veckor
 
-1. **Snigelpost robust**, eftersom riktiga spelare finns nu: ge upp, revansch,
-   automatisk förlust efter tystnad, städjobb, Open Graph-taggar på
-   inbjudningslänkar, felrapportering till mätningen.
+1. ~~**Snigelpost robust**: ge upp, revansch, vinst efter 14 dagars tystnad,
+   städjobb, Open Graph-taggar, felrapportering~~ – klart 2026-09-04.
 2. **Ljud och inställningar**: ljud av/på i HUD:en, dragtid, plötslig död,
    bättre ljud, slow motion vid dödsskott.
 3. **De två sista vapnen och AI-nivåer** (lätt, normal, svår).
