@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
     const dead: string[] = [];
     for (const s of subs) {
       const t = texts(s.lang, myName);
-      const payload = { title: 'Snäckmageddon', body: t[kind as 'turn' | 'joined' | 'finished'], url: `${SITE}/?match=${m.id}`, tag: `match-${m.id}` };
+      const payload = { title: s.lang === 'en' ? 'Snailmageddon' : 'Snäckmageddon', body: t[kind as 'turn' | 'joined' | 'finished'], url: `${SITE}/?match=${m.id}`, tag: `match-${m.id}` };
       const status = await sendPush({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, vapid, SITE).catch(() => 0);
       if (status === 201 || status === 200) sent++;
       else if (status === 404 || status === 410) dead.push(s.endpoint);

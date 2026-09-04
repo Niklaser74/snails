@@ -4,6 +4,7 @@ export const LANGS = { sv: 'Svenska', en: 'English' };
 
 const dict = {
   sv: {
+    'app.name': 'Snäckmageddon',
     'app.tagline': 'Turbaserat artilleri med afrikanska jättesnäckor. Långsamma. Skalade. Dödliga.',
     'menu.teams': 'Lag', 'menu.per': 'Snäckor per lag', 'menu.style': 'Snäckstil', 'menu.lang': 'Språk',
     'menu.start': 'Starta match', 'menu.design': 'Snäckdesign', 'menu.help': 'Så spelar du', 'menu.install': 'Installera app',
@@ -55,6 +56,7 @@ const dict = {
     'online.pushDenied': 'Notiser är blockerade i webbläsaren.', 'online.pushFail': 'Kunde inte slå på notiser.',
   },
   en: {
+    'app.name': 'Snailmageddon',
     'app.tagline': 'Turn-based artillery with giant African land snails. Slow. Shelled. Deadly.',
     'menu.teams': 'Teams', 'menu.per': 'Snails per team', 'menu.style': 'Snail style', 'menu.lang': 'Language',
     'menu.start': 'Start match', 'menu.design': 'Snail designs', 'menu.help': 'How to play', 'menu.install': 'Install app',

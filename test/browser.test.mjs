@@ -173,7 +173,10 @@ await test('language switch translates the menu and default team names', async (
   // headless Chromium is en-US, so the page starts in English
   assert.equal(await page.locator('#btn-start').textContent(), 'Start match');
   assert.equal(await page.inputValue('.team-row:nth-child(1) input'), 'Slime Gang');
+  assert.equal(await page.title(), 'Snailmageddon');
+  assert.equal(await page.locator('h1').textContent(), 'Snailmageddon');
   await page.selectOption('#opt-lang', 'sv');
+  assert.equal(await page.title(), 'Snäckmageddon');
   assert.equal(await page.locator('#btn-start').textContent(), 'Starta match');
   assert.equal(await page.inputValue('.team-row:nth-child(1) input'), 'Slemligan');
   assert.equal(await page.locator('#opt-style option').first().textContent(), 'Tecknad (Worms-stil)');

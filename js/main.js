@@ -69,6 +69,7 @@ function renderStyleOptions() {
 
 function applyLanguage() {
   applyDom();
+  document.title = t('app.name');
   renderStyleOptions();
   // team names that are still the default of some language follow the language switch
   document.querySelectorAll('.team-row').forEach((row, i) => {
@@ -475,7 +476,7 @@ $('btn-copy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(link); $('wait-status').textContent = t('online.copied'); }
   catch { $('wait-link').select(); }
 });
-$('btn-share').addEventListener('click', () => navigator.share?.({ title: 'Snäckmageddon', url: $('wait-link').value }).catch(() => {}));
+$('btn-share').addEventListener('click', () => navigator.share?.({ title: t('app.name'), url: $('wait-link').value }).catch(() => {}));
 $('btn-wait-refresh').addEventListener('click', () => { if (onlineMatch?.pending) submitTurn(onlineMatch.pending.finished, onlineMatch.pending.winnerTeam); else pollMatch(true); });
 $('btn-wait-menu').addEventListener('click', () => toMenu());
 $('btn-wait-play').addEventListener('click', () => { waiting.hidden = true; stopPolling(); if (game) { game.paused = false; lastTs = performance.now(); acc = 0; } });
