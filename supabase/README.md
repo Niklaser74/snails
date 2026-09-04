@@ -51,6 +51,12 @@ Spelarna är anonyma Supabase Auth-användare. **Slå på anonym inloggning**:
 Authentication → Sign In / Providers → Anonymous → "Allow anonymous sign-ins".
 Utan det får menyn texten "Snigelpost är inte tillgängligt just nu".
 
+Eftersom projektet delas med nissebus har dess trigger `handle_new_user` (som
+skapar en rad i `profiles` för varje ny användare) ändrats så att den hoppar
+över anonyma användare, som saknar e-post. Annars faller anonym inloggning med
+"Database error saving new user". Ändringen ligger som migrationen
+`handle_new_user_skip_anonymous` i projektet.
+
 Kända begränsningar i första versionen:
 - Ingen notis när det blir din tur. Väntläget pollar var åttonde sekund så länge
   sidan är öppen. Web Push är nästa steg.
