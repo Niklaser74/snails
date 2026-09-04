@@ -1,5 +1,6 @@
 import { Game, WEAPONS, TICK, RULES_VERSION, DEFAULT_RULES, TURN_TIMES, SUDDEN_DEATHS, normalizeRules } from './game.js';
 import { snigelpost } from './online.js';
+import { online } from './supa.js';
 import { push } from './push.js';
 import { SNAIL_STYLES, TEAM_COLORS } from './snails.js';
 import { unlockAudio, sfx } from './audio.js';
@@ -24,6 +25,7 @@ let tutorial = null; // active first-match guide, see startTutorial()
 let onlineMatch = null; // Snigelpost: { id, myTeam, startTick, match, pending }
 let replayUntil = 0; // >0 while the opponent's turn is being shown at speed
 let pollTimer = null;
+let renderAccount = () => {}; // set up once Snigelpost is available
 const waiting = $('waiting');
 
 // ---------- settings ----------
@@ -99,6 +101,7 @@ function applyLanguage() {
   renderStyleOptions();
   renderRuleOptions();
   renderMute();
+  renderAccount();
   // team names that are still the default of some language follow the language switch
   document.querySelectorAll('.team-row').forEach((row, i) => {
     const input = row.querySelector('input');
@@ -655,6 +658,40 @@ if (snigelpost.available()) {
     catch (e) { $('online-status').textContent = /anonymous|signup|sign-in|disabled/i.test(e.message) ? t('online.disabled') : t('online.error', { msg: e.message }); }
     b.disabled = false;
   });
+  // ---------- account: e-mail linking ----------
+  const redirectTo = () => location.origin + location.pathname;
+  const emailOk = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  renderAccount = async function () {
+    const st = $('account-status'), row = $('account-row'), out = $('btn-logout');
+    try {
+      const u = await online.user(true);
+      if (u.email && !u.anonymous) { st.textContent = t('account.linked', { email: u.email }); row.hidden = true; out.hidden = false; }
+      else if (u.pendingEmail) { st.textContent = t('account.pending', { email: u.pendingEmail }); row.hidden = false; out.hidden = true; }
+      else { st.textContent = t('account.anonymous'); row.hidden = false; out.hidden = true; }
+    } catch { st.textContent = t('online.accountHint'); row.hidden = true; out.hidden = true; }
+  };
+  const accountAction = (btn, fn) => btn.addEventListener('click', async () => {
+    const email = $('opt-email').value.trim().toLowerCase();
+    if (!emailOk(email)) { $('account-msg').textContent = t('account.invalid'); return; }
+    btn.disabled = true;
+    try { $('account-msg').textContent = await fn(email); track('account', { action: btn.id }); }
+    catch (e) { $('account-msg').textContent = /signups? not allowed|not found|otp_disabled/i.test(e.message) ? t('account.noAccount') : t('account.error', { msg: e.message }); }
+    btn.disabled = false;
+    renderAccount();
+  });
+  accountAction($('btn-link-email'), async (email) => { await online.linkEmail(email, redirectTo()); return t('account.linkSent', { email }); });
+  accountAction($('btn-login-email'), async (email) => { await online.sendLoginLink(email, redirectTo()); return t('account.loginSent', { email }); });
+  $('btn-logout').addEventListener('click', () => { online.signOut(); location.reload(); });
+  // coming back from a confirmation or login link
+  const back = online.handleRedirect();
+  if (back && back.type !== 'error') online.ensureUserId().catch(() => {});
+  if (back) {
+    if (back.type === 'error') $('account-msg').textContent = t('account.error', { msg: back.message });
+    else $('account-msg').textContent = t(back.type === 'magiclink' ? 'account.welcomeLogin' : 'account.welcomeLinked');
+    track('account', { action: back.type });
+  }
+  renderAccount();
+
   refreshMatchList();
   const joinId = new URLSearchParams(location.search).get('match');
   if (joinId) openMatch(joinId);

@@ -429,6 +429,54 @@ await test('Snigelpost: two players trade turns through the server', async () =>
   await ctxA.close(); await ctxB.close();
 });
 
+await test('account: link an e-mail, then sign in with a login link on another device', async () => {
+  const ctxA = await browser.newContext(), ctxB = await browser.newContext();
+  const a = await ctxA.newPage(); a.setDefaultTimeout(20000); await fake.install(a);
+  await a.goto(base + '/'); await a.waitForSelector('#online:not([hidden])');
+  await a.waitForFunction(() => !document.getElementById('account-row').hidden);
+  assert.match(await a.locator('#account-status').textContent(), /lives in this browser|bara i den här/);
+  // a match exists on A's anonymous account
+  await a.fill('#opt-name', 'Anna'); await a.click('#btn-online-create');
+  await a.waitForSelector('#waiting:not([hidden])');
+  const uidA = [...fake.matches.values()][fake.matches.size - 1].host;
+  await a.click('#btn-wait-menu');
+  // bad address is refused locally, good address sends a confirmation mail
+  await a.fill('#opt-email', 'not-an-address'); await a.click('#btn-link-email');
+  assert.match(await a.locator('#account-msg').textContent(), /valid e-mail|giltig/);
+  await a.fill('#opt-email', 'anna@example.test'); await a.click('#btn-link-email');
+  await a.waitForFunction(() => /confirm|bekräfta/i.test(document.getElementById('account-msg').textContent));
+  await a.waitForFunction(() => /Confirmation sent|Bekräftelse skickad/.test(document.getElementById('account-status').textContent));
+  assert.equal(fake.mails.length, 1); assert.equal(fake.mails[0].kind, 'email_change'); assert.equal(fake.mails[0].uid, uidA);
+  assert.match(fake.mails[0].redirect, /^http:\/\/localhost:\d+\/$/);
+  // clicking the link brings the browser back with the session in the fragment: same user, now linked
+  await a.goto('about:blank'); await a.goto(base + '/' + fake.clickMail(fake.mails[0])); // a real link is a fresh page load
+  await a.waitForFunction(() => /linked to anna@example.test|kopplat till anna@example.test/.test(document.getElementById('account-status').textContent));
+  assert.equal(await a.evaluate(() => location.hash), '', 'tokens should be removed from the URL');
+  assert.match(await a.locator('#account-msg').textContent(), /now linked|nu kopplat/);
+  assert.equal(await a.locator('#account-row').isHidden(), true);
+  assert.equal(await a.locator('#btn-logout').isHidden(), false);
+  await a.waitForSelector('.mrow');
+  assert.equal(await a.evaluate(() => JSON.parse(localStorage.getItem('snackmageddon.session')).user_id), uidA);
+  // device B: anonymous at first, asks for a login link with the same address
+  const b = await ctxB.newPage(); b.setDefaultTimeout(20000); await fake.install(b);
+  await b.goto(base + '/'); await b.waitForFunction(() => !document.getElementById('account-row').hidden);
+  assert.equal(await b.locator('.mrow').count(), 0);
+  await b.fill('#opt-email', 'nobody@example.test'); await b.click('#btn-login-email');
+  await b.waitForFunction(() => /no account|inget konto/i.test(document.getElementById('account-msg').textContent));
+  await b.fill('#opt-email', 'Anna@example.test'); await b.click('#btn-login-email');
+  await b.waitForFunction(() => /Login link sent|Inloggningslänk skickad/.test(document.getElementById('account-msg').textContent));
+  assert.equal(fake.mails.length, 2); assert.equal(fake.mails[1].kind, 'magiclink'); assert.equal(fake.mails[1].uid, uidA);
+  await b.goto('about:blank'); await b.goto(base + '/' + fake.clickMail(fake.mails[1]));
+  await b.waitForFunction(() => /linked to anna@example.test|kopplat till anna@example.test/.test(document.getElementById('account-status').textContent));
+  await b.waitForSelector('.mrow');
+  assert.equal(await b.evaluate(() => JSON.parse(localStorage.getItem('snackmageddon.session')).user_id), uidA, 'B should now be the same user as A');
+  // sign out gives a fresh anonymous account on this device
+  await b.click('#btn-logout');
+  await b.waitForFunction(() => !document.getElementById('account-row').hidden);
+  assert.notEqual(await b.evaluate(() => JSON.parse(localStorage.getItem('snackmageddon.session')).user_id), uidA);
+  await ctxA.close(); await ctxB.close();
+});
+
 await test('service worker registers and manifest is valid', async () => {
   const { page, errors } = await open('/');
   const sw = await page.evaluate(async () => {

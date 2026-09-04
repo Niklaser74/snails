@@ -30,7 +30,8 @@ att göra det hållbart, roligare och till slut lönsamt.
 ### Fas 2 – Snigelpost
 | Klart | Kvar |
 |---|---|
-| Deterministisk simulering, replay, hash | E-postkoppling av kontot (magic link) |
+| Deterministisk simulering, replay, hash | |
+| E-postkoppling av kontot, inloggningslänk på andra enheter | |
 | Anonyma konton, matcher, drag, inbjudan via länk | |
 | Motståndarens drag i 3× med hoppa över | Åskådarläge och delbar replay av färdig match |
 | Push-notiser (egen Web Push, VAPID i Vault) | Serversidig verifiering av drag (edge-funktion kör simuleringen) |
@@ -90,8 +91,9 @@ Stripe när e-postkoppling finns, sedan säsongspass och belönad reklam.
 3. ~~**De två sista vapnen och AI-nivåer** (lätt, normal, svår).~~ – klart 2026-09-04.
    Regelversionen höjdes till 3 (nya vapen ändrar hashen); databasen var tom, så
    inga matcher gick förlorade. Punkt 6 nedan är fortfarande öppen.
-4. **E-postkoppling** av kontot, grunden för fas 3 och för att inte tappa
-   spelare vid byte av telefon.
+4. ~~**E-postkoppling** av kontot, grunden för fas 3 och för att inte tappa
+   spelare vid byte av telefon.~~ – klart 2026-09-04 (kräver Redirect URLs i
+   Supabase, se `supabase/README.md`).
 5. **snails.se och Poki-inskick** när DNS:en är på plats.
 6. **Versionsstrategi för simuleringen** innan nästa regeländring.
 
@@ -101,8 +103,9 @@ daglig återkomst utan att kräva kosmetik.
 ## Risker
 
 - **Worms-varumärket.** Aldrig i namn eller marknadsföring. Genren är fri.
-- **Anonyma konton som försvinner.** Tills e-postkoppling finns förlorar en
-  spelare sina matcher om webbläsardata rensas. Säg det i gränssnittet.
+- **Anonyma konton som försvinner.** En spelare som inte kopplat e-post
+  förlorar sina matcher om webbläsardata rensas. Gränssnittet säger det och
+  erbjuder kopplingen.
 - **Missbruk av anonym inloggning.** Supabase rekommenderar captcha. Vänta med
   det tills mätningen visar problem, friktionen kostar mer än nyttan i början.
 - **Barn spelar.** Rena köpflöden, inga mörka mönster, ingen fri chatt.

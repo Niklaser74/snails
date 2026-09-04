@@ -3,6 +3,8 @@
 // page.route so browser tests never touch the network.
 export function createFakeSupabase() {
   const users = new Map(); // token -> user id
+  const accounts = new Map(); // user id -> { email, pendingEmail }
+  const mails = []; // e-mails Supabase would have sent: { to, kind, uid }
   const matches = new Map();
   const turns = new Map(); // match id -> [turns]
   const events = [];
@@ -138,12 +140,32 @@ export function createFakeSupabase() {
   async function handle(route) {
     const req = route.request();
     const url = new URL(req.url());
-    const json = (status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, apikey, content-type', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Cache-Control': 'no-store' };
+    const json = (status, body) => route.fulfill({ status, contentType: 'application/json', headers: cors, body: JSON.stringify(body) });
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
     try {
       if (url.pathname.startsWith('/auth/v1/')) {
-        const id = uuid();
-        users.set('tok-' + id, id);
-        return json(200, { access_token: 'tok-' + id, refresh_token: 'ref-' + id, expires_in: 3600, user: { id } });
+        const token = (req.headers()['authorization'] || '').replace('Bearer ', '');
+        const uid = users.get(token);
+        const sub = url.pathname.slice('/auth/v1/'.length);
+        const body = JSON.parse(req.postData() || '{}');
+        const session = (id) => { const tok = 'tok-' + id + '-' + (++seq); users.set(tok, id); return { access_token: tok, refresh_token: 'ref-' + id, expires_in: 3600, user: { id } }; };
+        if (sub === 'signup' && req.method() === 'POST') { const id = uuid(); accounts.set(id, { email: null, pendingEmail: null }); return json(200, session(id)); }
+        if (sub.startsWith('token') && req.method() === 'POST') { const id = String(body.refresh_token || '').replace(/^ref-/, ''); if (!accounts.has(id)) return json(400, { error: 'invalid refresh token' }); return json(200, session(id)); }
+        if (sub === 'user' && req.method() === 'GET') { if (!uid) return json(401, { msg: 'not signed in' }); const a = accounts.get(uid); return json(200, { id: uid, email: a.email || undefined, new_email: a.pendingEmail || undefined, is_anonymous: !a.email }); }
+        if (sub.startsWith('user') && req.method() === 'PUT') {
+          if (!uid) return json(401, { msg: 'not signed in' });
+          if ([...accounts.values()].some((a) => a.email === body.email)) return json(422, { msg: 'A user with this email address has already been registered' });
+          accounts.get(uid).pendingEmail = body.email; mails.push({ to: body.email, kind: 'email_change', uid, redirect: url.searchParams.get('redirect_to') });
+          return json(200, { id: uid, new_email: body.email, is_anonymous: true });
+        }
+        if (sub.startsWith('otp') && req.method() === 'POST') {
+          const owner = [...accounts.entries()].find(([, a]) => a.email === body.email);
+          if (!owner) return json(422, { msg: 'Signups not allowed for otp' });
+          mails.push({ to: body.email, kind: 'magiclink', uid: owner[0], redirect: url.searchParams.get('redirect_to') });
+          return json(200, {});
+        }
+        return json(404, { msg: 'no such auth endpoint ' + sub });
       }
       if (url.pathname === '/rest/v1/snails_events') { events.push(...JSON.parse(req.postData() || '[]')); return json(201, []); }
       if (url.pathname === '/functions/v1/notify-turn') {
@@ -168,5 +190,13 @@ export function createFakeSupabase() {
     }
   }
 
-  return { handle, matches, turns, series, events, pushes, notifies, install: (page) => page.route('**/*.supabase.co/**', handle) };
+  // What the link in an e-mail does: confirms the address (email_change) or signs in (magiclink).
+  // Returns the URL fragment Supabase would redirect the browser back with.
+  function clickMail(mail) {
+    const a = accounts.get(mail.uid);
+    if (mail.kind === 'email_change') { a.email = a.pendingEmail; a.pendingEmail = null; }
+    const tok = 'tok-' + mail.uid + '-' + (++seq); users.set(tok, mail.uid);
+    return `#access_token=${tok}&refresh_token=ref-${mail.uid}&expires_in=3600&token_type=bearer&type=${mail.kind}`;
+  }
+  return { handle, matches, turns, series, events, pushes, notifies, accounts, mails, clickMail, install: (page) => page.route('**/*.supabase.co/**', handle) };
 }

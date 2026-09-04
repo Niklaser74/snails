@@ -81,11 +81,35 @@ bli bäst av 5). `snails_rematch` startar en ny serie med samma längd, eller
 returnerar den pågående seriens aktuella match. `snails_get_match` returnerar
 `series` med ställning sett från anroparen.
 
+# E-postkoppling av kontot
+
+Ett anonymt konto kan kopplas till en e-postadress i menyn (Snigelpost →
+E-post → Koppla kontot). Klienten (`js/supa.js`) anropar `PUT /auth/v1/user`
+med adressen; Supabase skickar mallen "Change Email Address" med en
+bekräftelselänk. När länken klickas är kontot permanent (samma användar-id,
+matcherna följer med) och länken skickar webbläsaren tillbaka till spelet med
+sessionen i URL-fragmentet, som `handleRedirect()` sparar.
+
+På en annan enhet skriver spelaren samma adress och väljer "Skicka
+inloggningslänk": `POST /auth/v1/otp` med `create_user: false`, så en
+felstavad adress kan aldrig skapa ett nytt konto. Länken loggar in som samma
+användare. Den anonyma sessionen på den enheten ersätts; matcher som spelats
+anonymt där följer inte med (gränssnittet säger det).
+
+**Inställningar som krävs i Supabase** (Authentication → URL Configuration):
+lägg till `https://snails.se/**` och `https://niklaser74.github.io/snails/**`
+under Redirect URLs. Utan det vägrar Supabase `redirect_to` och länkarna går
+till projektets Site URL i stället. E-postmallarna (Authentication → Email
+Templates) delas med nissebus; texten i "Change Email Address" och "Magic Link"
+bör nämna båda apparna, eller hållas neutral.
+
 Kända begränsningar:
 - Servern kör inte simuleringen själv; den litar på klientens hash. Motståndarens
   klient jämför sin egen hash med den sparade och varnar vid avvikelse.
-- Ett anonymt konto lever i webbläsarens localStorage. Rensas den försvinner
-  kontot och dess matcher. Koppling till e-post kommer senare.
+- Ett konto utan e-post lever i webbläsarens localStorage. Rensas den försvinner
+  kontot och dess matcher.
+- nissebus trigger skapar ingen `profiles`-rad när ett anonymt konto får e-post
+  (den körs bara vid insert). En sådan användare saknar alltså profil i nissebus.
 
 # Push-notiser
 

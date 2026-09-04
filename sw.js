@@ -1,5 +1,5 @@
 // Service worker: cache-first app shell so the game works offline.
-const VERSION = 'snackmageddon-v16';
+const VERSION = 'snackmageddon-v17';
 const ASSETS = [
   './',
   './index.html',
@@ -63,6 +63,7 @@ self.addEventListener('notificationclick', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  if (new URL(e.request.url).origin !== location.origin) return; // API calls (Supabase, fonts) go straight to the network
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then((cached) => {
       const network = fetch(e.request)

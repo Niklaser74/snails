@@ -103,7 +103,16 @@
         <button id="btn-online-create" class="primary" data-i18n="online.create">Skapa match</button>
       </div>
       <div id="online-list" class="online-list"></div>
-      <p class="hint" data-i18n="online.accountHint">Kontot finns bara i den här webbläsaren. Rensar du webbdata försvinner dina matcher.</p>
+      <div id="account" class="account">
+        <p class="hint" id="account-status"></p>
+        <div class="row" id="account-row" hidden>
+          <label><span data-i18n="account.email">E-post</span> <input type="email" id="opt-email" maxlength="80" autocomplete="email"></label>
+          <button id="btn-link-email" class="secondary" data-i18n="account.link">Koppla kontot</button>
+          <button id="btn-login-email" class="secondary" data-i18n="account.login">Skicka inloggningslänk</button>
+        </div>
+        <button id="btn-logout" class="secondary small" data-i18n="account.logout" hidden>Logga ut på den här enheten</button>
+        <p class="hint" id="account-msg"></p>
+      </div>
       <p class="hint" id="online-status"></p>
     </section>
   </div>
