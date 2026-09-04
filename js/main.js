@@ -410,6 +410,8 @@ async function submitTurn(finished, winnerTeam) {
 function showWaiting() {
   if (!onlineMatch) return;
   waiting.hidden = false;
+  // my own turn is on hold while the overlay is up (invite link before turn 1)
+  if (game && isMyTurn(onlineMatch.match) && game.tickCount <= onlineMatch.startTick) game.paused = true;
   renderWaiting();
   startPolling();
 }
@@ -447,7 +449,7 @@ $('btn-copy').addEventListener('click', async () => {
 $('btn-share').addEventListener('click', () => navigator.share?.({ title: 'Snäckmageddon', url: $('wait-link').value }).catch(() => {}));
 $('btn-wait-refresh').addEventListener('click', () => { if (onlineMatch?.pending) submitTurn(onlineMatch.pending.finished, onlineMatch.pending.winnerTeam); else pollMatch(true); });
 $('btn-wait-menu').addEventListener('click', () => toMenu());
-$('btn-wait-play').addEventListener('click', () => { waiting.hidden = true; stopPolling(); });
+$('btn-wait-play').addEventListener('click', () => { waiting.hidden = true; stopPolling(); if (game) { game.paused = false; lastTs = performance.now(); acc = 0; } });
 
 function startPolling() { stopPolling(); pollTimer = setInterval(() => pollMatch(false), 8000); }
 function stopPolling() { if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
