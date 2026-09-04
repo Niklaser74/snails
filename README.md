@@ -33,10 +33,14 @@ sätts i `js/main.js` (`settings.style`).
 
 - 2–4 lag, 1–4 snäckor per lag, människa eller dator per lag.
 - 45 sekunder per drag, 4 sekunders reträtt efter skott.
-- Vapen: Bazooka (vind), Granat (studsar, 3 s), Saltspruta (kort räckvidd), Dynamit.
+- Vapen: Bazooka (vind), Granat (studsar, 3 s), Saltspruta (kort räckvidd), Dynamit,
+  Slemklot (klibbar fast, även på snäckor, 2 s), Saltregn (markörsiktat luftanfall).
+  Dynamit, slemklot och saltregn har begränsad ammunition per lag.
+- Lådor faller ner mellan dragen: hälsa (+35) eller extra ammunition. Lådor i en
+  explosion smäller själva.
 - Förstörbar terräng, fallskada, vatten som dränker, plötslig död efter 16 drag.
 - Tangentbord: ← → / A D gå, ↑ ↓ / W S sikta, mellanslag ladda+skjut, Enter hoppa,
-  1–4 / Tab vapen, Esc meny. Touch: knappar på skärmen, dra för att panorera, nyp för zoom.
+  1–6 / Tab vapen, Esc meny. Touch: knappar på skärmen, dra för att panorera, nyp för zoom.
 
 ## Deterministisk simulering
 

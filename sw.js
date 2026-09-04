@@ -1,5 +1,5 @@
 // Service worker: cache-first app shell so the game works offline.
-const VERSION = 'snackmageddon-v3';
+const VERSION = 'snackmageddon-v4';
 const ASSETS = [
   './',
   './index.html',

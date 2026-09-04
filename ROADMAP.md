@@ -123,9 +123,9 @@ Räkneexempel med försiktiga antaganden, inte prognos:
 
 ## Nästa två veckor
 
-1. Deterministisk simulering och indata-händelser (grunden för allt).
-2. Testerna in i repot och CI.
-3. Två nya vapen och lådor.
+1. ~~Deterministisk simulering och indata-händelser~~ – klart 2026-09-04.
+2. ~~Testerna in i repot och CI~~ – klart 2026-09-04 (Node + Playwright).
+3. ~~Två nya vapen och lådor~~ – klart 2026-09-04 (Slemklot, Saltregn, ammunition, lådor).
 4. Tutorial och engelsk översättning av all text.
 5. Mätning på plats.
 6. Ladda upp på itch.io och skicka in till Poki.

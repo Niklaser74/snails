@@ -37,6 +37,9 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #5fb0ea; fon
 .weapons { position: absolute; right: 8px; top: calc(52px + var(--safe-t)); display: flex; flex-direction: column; gap: 6px; }
 .weapons button { width: 52px; height: 44px; border: 2px solid transparent; border-radius: 10px; background: var(--hud); color: #fff; font-size: 20px; display: grid; place-items: center; line-height: 1; cursor: pointer; }
 .weapons button small { font-size: 9px; opacity: .8; }
+.weapons button { position: relative; }
+.weapons .ammo { position: absolute; top: 2px; right: 3px; font-size: 9px; font-weight: 800; background: #ffd54f; color: #1f1710; border-radius: 8px; padding: 0 4px; line-height: 12px; }
+.weapons .ammo:empty { display: none; }
 .weapons button.sel { border-color: #ffd54f; background: rgba(60,45,20,.85); }
 .weapons button:disabled { opacity: .4; cursor: default; }
 

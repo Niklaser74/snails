@@ -55,5 +55,7 @@ export const sfx = {
   splash() { noise(0.4, 0.4, 900, 2.5); tone(300, 80, 0.3, 'sine', 0.2); },
   tick() { tone(1200, 1200, 0.04, 'square', 0.05); },
   turn() { tone(500, 800, 0.12, 'sine', 0.12); },
+  splat() { noise(0.12, 0.3, 700, 3); tone(250, 90, 0.18, 'sine', 0.2); },
+  crate() { tone(660, 990, 0.12, 'triangle', 0.15); setTimeout(() => tone(990, 1320, 0.15, 'triangle', 0.15), 90); },
   win() { tone(400, 800, 0.4, 'triangle', 0.2); setTimeout(() => tone(600, 1200, 0.5, 'triangle', 0.2), 200); },
 };

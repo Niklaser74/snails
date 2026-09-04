@@ -115,7 +115,7 @@ function buildWeaponBar() {
   WEAPONS.forEach((w, i) => {
     const b = document.createElement('button');
     b.dataset.id = w.id;
-    b.innerHTML = `${w.icon}<small>${i + 1}</small>`;
+    b.innerHTML = `${w.icon}<small>${i + 1}</small><span class="ammo"></span>`;
     b.title = w.name;
     b.addEventListener('pointerdown', (e) => { e.preventDefault(); game?.selectWeapon(w.id); });
     box.appendChild(b);
@@ -134,11 +134,15 @@ addEventListener('keydown', (e) => {
   const k = keyMap[e.code];
   if (k) { if (!game.ai || k === 'fire') { /* humans only */ } if (!game.ai) game.input[k] = true; e.preventDefault(); }
   if (game.ai || game.replay) return;
-  if (/^Digit[1-4]$/.test(e.code)) game.selectWeapon(WEAPONS[+e.code[5] - 1].id);
+  if (/^Digit[1-6]$/.test(e.code)) game.selectWeapon(WEAPONS[+e.code[5] - 1].id);
   if (e.code === 'Tab') {
     e.preventDefault();
-    const i = WEAPONS.findIndex((w) => w.id === game.weaponId);
-    game.selectWeapon(WEAPONS[(i + 1) % WEAPONS.length].id);
+    const ammo = game.active ? game.teams[game.active.team].ammo : {};
+    let i = WEAPONS.findIndex((w) => w.id === game.weaponId);
+    for (let k = 0; k < WEAPONS.length; k++) {
+      i = (i + 1) % WEAPONS.length;
+      if (ammo[WEAPONS[i].id] > 0) { game.selectWeapon(WEAPONS[i].id); break; }
+    }
   }
   if (e.code === 'Escape') { $('btn-menu').click(); }
 });
@@ -232,8 +236,10 @@ function updateHud(now) {
     r.querySelector('.tcount').textContent = `${t.alive}`;
   });
   for (const b of $('weapons').children) {
+    const a = st.ammo ? st.ammo[b.dataset.id] : Infinity;
     b.classList.toggle('sel', b.dataset.id === st.weapon);
-    b.disabled = st.phase !== 'aim' || st.ai;
+    b.querySelector('.ammo').textContent = a === Infinity ? '' : a;
+    b.disabled = st.phase !== 'aim' || st.ai || !(a > 0);
   }
 }
 

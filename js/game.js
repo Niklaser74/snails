@@ -6,16 +6,21 @@ import { dsin, dcos, dhypot, datan2 } from './dmath.js';
 
 // Bump when physics or rules change so old recordings are not replayed with
 // new rules.
-export const RULES_VERSION = 1;
+export const RULES_VERSION = 2;
 // Fixed simulation step. The sim only ever advances by exactly this much.
 export const TICK = 1 / 60;
 
+// ammo: shots per team and match (Infinity = unlimited). Crates add more.
+// contact: explodes on first contact. sticky: stops where it lands. marker: aimed with a ground marker.
 export const WEAPONS = [
-  { id: 'bazooka', name: 'Bazooka', icon: '🚀', radius: 36, dmg: 48, wind: true, charge: true, speed: 900 },
-  { id: 'granat', name: 'Granat', icon: '💣', radius: 32, dmg: 42, fuse: 3, bounce: 0.45, charge: true, speed: 760 },
-  { id: 'salt', name: 'Saltspruta', icon: '🧂', pellets: 3, range: 240, dmg: 13, radius: 9, charge: false },
-  { id: 'dynamit', name: 'Dynamit', icon: '🧨', fuse: 4, radius: 52, dmg: 75, charge: false },
+  { id: 'bazooka', name: 'Bazooka', icon: '🚀', radius: 36, dmg: 48, wind: true, charge: true, speed: 900, contact: true, ammo: Infinity },
+  { id: 'granat', name: 'Granat', icon: '💣', radius: 32, dmg: 42, fuse: 3, bounce: 0.45, charge: true, speed: 760, ammo: Infinity },
+  { id: 'salt', name: 'Saltspruta', icon: '🧂', pellets: 3, range: 240, dmg: 13, radius: 9, charge: false, ammo: Infinity },
+  { id: 'dynamit', name: 'Dynamit', icon: '🧨', fuse: 4, radius: 52, dmg: 75, charge: false, ammo: 2 },
+  { id: 'slem', name: 'Slemklot', icon: '🟢', radius: 30, dmg: 40, fuse: 2, charge: true, speed: 700, sticky: true, ammo: 3 },
+  { id: 'saltregn', name: 'Saltregn', icon: '🌧️', radius: 13, dmg: 12, drops: 5, wind: true, charge: false, contact: true, marker: true, ammo: 1 },
 ];
+export const CRATE_WEAPONS = ['dynamit', 'slem', 'saltregn'];
 export const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map((w) => [w.id, w]));
 
 export const SNAIL_NAMES = [
@@ -87,6 +92,9 @@ export class Game {
     this.lastRecorded = null;
     this.replayIdx = 0;
     this.projectiles = [];
+    this.crates = [];
+    this.pendingBooms = [];
+    this.markerX = 0;
     this.particles = [];
     this.popups = [];
     this.shake = 0;
@@ -148,6 +156,9 @@ export class Game {
       h.num(s.x).num(s.y).num(s.vx).num(s.vy).int(s.hp).byte(s.alive ? 1 : 0).byte(s.facing + 2).num(s.aim).byte(s.airborne ? 1 : 0).num(s.walkAcc);
     }
     for (const p of this.projectiles) h.num(p.x).num(p.y).num(p.vx).num(p.vy).num(p.age).byte(p.rest ? 1 : 0);
+    for (const c of this.crates) h.num(c.x).num(c.y).num(c.vy).byte(c.landed ? 1 : 0).byte(c.type === 'health' ? 1 : 2);
+    h.num(this.markerX);
+    for (const t of this.teams) for (const w of WEAPONS) h.int(t.ammo[w.id] === Infinity ? -1 : t.ammo[w.id]);
     h.bytes(this.terrain.mask);
     return h.hex();
   }
@@ -157,7 +168,7 @@ export class Game {
     let ni = 0;
     this.teams = this.config.teams.map((t, ti) => ({
       index: ti, name: t.name, color: t.color, ai: !!t.ai, nextSnail: 0,
-      snails: [],
+      snails: [], ammo: Object.fromEntries(WEAPONS.map((w) => [w.id, w.ammo])),
     }));
     this.snails = [];
     const per = this.config.snailsPerTeam || 3;
@@ -206,6 +217,7 @@ export class Game {
     this.active = s;
     this.turnCount++;
     this.wind = Math.round((this.rng() * 2 - 1) * 10) / 10;
+    const crate = this.turnCount > 1 && this.rng() < 0.4 ? this.spawnCrate() : null;
     this.timer = TURN_TIME;
     this.phase = 'aim';
     this.power = 0;
@@ -220,11 +232,62 @@ export class Game {
     if (this.turnCount > SUDDEN_DEATH_TURN) {
       this.waterY -= 7;
       this.say(`Vattnet stiger! ${team.name}: ${s.name}`, 2.5);
+    } else if (crate) {
+      this.say(crate.type === 'health' ? 'En hälsolåda faller!' : 'En vapenlåda faller!', 2.5);
     } else {
       this.say(`${team.name} – ${s.name}`, 2);
     }
     sfx.turn();
     this.hooks.onTurn?.(this);
+  }
+
+  // ---------- crates ----------
+  spawnCrate() {
+    const type = this.rng() < 0.5 ? 'health' : 'weapon';
+    const x = Math.round(60 + this.rng() * (this.W - 120));
+    const weapon = CRATE_WEAPONS[Math.floor(this.rng() * CRATE_WEAPONS.length)];
+    const c = { x, y: -20, vy: 0, type, weapon, landed: false, chute: true };
+    this.crates.push(c);
+    return c;
+  }
+
+  updateCrates(dt) {
+    for (let i = this.crates.length - 1; i >= 0; i--) {
+      const c = this.crates[i];
+      if (c.landed) {
+        if (!this.terrain.solid(c.x, c.y + 1)) { c.landed = false; c.chute = false; c.vy = 0; }
+        continue;
+      }
+      c.vy = c.chute ? Math.min(c.vy + G * dt, 70) : c.vy + G * dt;
+      const ny = c.y + c.vy * dt;
+      if (ny > this.waterY) { this.crates.splice(i, 1); sfx.splash(); continue; }
+      let y = Math.floor(c.y);
+      let hit = false;
+      for (; y <= Math.ceil(ny); y++) if (this.terrain.solid(c.x, y)) { hit = true; break; }
+      if (hit) { c.y = y - 1; c.landed = true; c.vy = 0; } else c.y = ny;
+    }
+  }
+
+  // A snail standing on or walking into a landed crate picks it up.
+  checkCrates(s) {
+    for (let i = this.crates.length - 1; i >= 0; i--) {
+      const c = this.crates[i];
+      if (!c.landed) continue;
+      if (Math.abs(s.x - c.x) < 16 && s.y > c.y - 30 && s.y < c.y + 24) {
+        this.crates.splice(i, 1);
+        const team = this.teams[s.team];
+        if (c.type === 'health') {
+          s.hp = Math.min(100, s.hp + 35);
+          this.say(`${s.name} +35 hälsa`, 1.6);
+          if (!this.headless) this.popups.push({ x: s.x, y: s.y - 40, text: '+35', life: 1.3, color: '#6cc25a' });
+        } else {
+          team.ammo[c.weapon] += 1;
+          this.say(`${s.name} hittade ${WEAPON_BY_ID[c.weapon].name}!`, 1.8);
+          if (!this.headless) this.popups.push({ x: s.x, y: s.y - 40, text: WEAPON_BY_ID[c.weapon].icon, life: 1.3, color: '#fff' });
+        }
+        sfx.crate();
+      }
+    }
   }
 
   gameOver(winner) {
@@ -265,10 +328,13 @@ export class Game {
 
     for (const s of this.snails) this.updateSnail(s, dt);
     this.updateProjectiles(dt);
+    this.updateCrates(dt);
+    for (const s of this.snails) if (s.alive) this.checkCrates(s);
+    while (this.pendingBooms.length) { const b = this.pendingBooms.shift(); this.explosion(b.x, b.y, b.r, b.dmg, null, 0.6); }
     this.updateParticles(dt);
 
     if (this.phase === 'settle') {
-      const busy = this.projectiles.length > 0 || this.snails.some((s) => s.alive && (s.airborne || Math.abs(s.vx) > 1));
+      const busy = this.projectiles.length > 0 || this.pendingBooms.length > 0 || this.snails.some((s) => s.alive && (s.airborne || Math.abs(s.vx) > 1));
       if (busy) {
         this.settleTimer = 0;
       } else {
@@ -302,15 +368,28 @@ export class Game {
     const s = this.active;
     if (!s || !s.alive) return;
     const inp = this.frame;
+    const team = this.teams[s.team];
+    const aiming = this.phase === 'aim' && !this.hasFired;
+    // the weapon choice is an input; apply it first so the rest of the tick sees it
+    if (aiming && !this.charging && inp.weapon !== this.weaponId && WEAPON_BY_ID[inp.weapon] && team.ammo[inp.weapon] > 0) {
+      this.weaponId = inp.weapon;
+      if (WEAPON_BY_ID[inp.weapon].marker) this.markerX = clamp(s.x + s.facing * 160, 20, this.W - 20);
+    }
+    const marker = aiming && !!WEAPON_BY_ID[this.weaponId].marker;
     s.walking = false;
     if (!s.airborne) {
       if (inp.left || inp.right) {
         const dir = inp.right ? 1 : -1;
-        s.facing = dir;
-        if (!this.charging) {
-          s.walking = true;
-          s.walkAcc += WALK * dt;
-          while (s.walkAcc >= 1) { s.walkAcc -= 1; if (!this.stepSnail(s, dir)) { s.walkAcc = 0; break; } }
+        if (marker) {
+          // marker weapons: left/right move the target marker instead of the snail
+          this.markerX = clamp(this.markerX + dir * 320 * dt, 20, this.W - 20);
+        } else {
+          s.facing = dir;
+          if (!this.charging) {
+            s.walking = true;
+            s.walkAcc += WALK * dt;
+            while (s.walkAcc >= 1) { s.walkAcc -= 1; if (!this.stepSnail(s, dir)) { s.walkAcc = 0; break; } }
+          }
         }
       }
       if (inp.jump && !this.charging) {
@@ -326,8 +405,7 @@ export class Game {
     if (inp.up) s.aim = clamp(s.aim + 1.6 * dt, -1.45, 1.45);
     if (inp.down) s.aim = clamp(s.aim - 1.6 * dt, -1.45, 1.45);
 
-    if (this.phase === 'aim' && !this.hasFired) {
-      if (!this.charging && inp.weapon !== this.weaponId && WEAPON_BY_ID[inp.weapon]) this.weaponId = inp.weapon;
+    if (aiming) {
       const w = WEAPON_BY_ID[this.weaponId];
       const pressed = inp.fire && !this.prevFire;
       const released = !inp.fire && this.prevFire;
@@ -438,7 +516,9 @@ export class Game {
     this.timer = RETREAT_TIME;
     this.cam.manual = false;
     const h = this.headPos(s), d = this.aimDir(s);
-    if (w.id === 'bazooka' || w.id === 'granat') {
+    const team = this.teams[s.team];
+    if (team.ammo[w.id] !== Infinity) team.ammo[w.id] = Math.max(0, team.ammo[w.id] - 1);
+    if (w.speed) {
       const p = {
         type: w.id, x: h.x + d.x * 18, y: h.y + d.y * 18, vx: d.x * w.speed * power, vy: d.y * w.speed * power,
         fuse: w.fuse ?? 0, age: 0, owner: s, rot: 0, rest: false,
@@ -452,8 +532,21 @@ export class Game {
       const p = { type: 'dynamit', x: s.x + s.facing * 10, y: s.y - 6, vx: 0, vy: 0, fuse: w.fuse, age: 0, owner: s, rot: 0, rest: false };
       this.projectiles.push(p);
       this.cam.target = s;
+    } else if (w.id === 'saltregn') {
+      this.fireSaltRain(this.markerX, w);
     }
     this.hooks.onFire?.(this);
+  }
+
+  // Salt rain: a handful of salt crystals fall from the sky around the marker.
+  fireSaltRain(x, w) {
+    for (let i = 0; i < w.drops; i++) {
+      const dx = (i - (w.drops - 1) / 2) * 24 + (this.rng() - 0.5) * 10;
+      const p = { type: 'saltregn', x: clamp(x + dx, 2, this.W - 2), y: -30 - i * 18, vx: 0, vy: 160, fuse: 0, age: 0, owner: null, rot: 0, rest: false };
+      this.projectiles.push(p);
+    }
+    this.cam.target = this.projectiles[this.projectiles.length - 1];
+    sfx.shoot();
   }
 
   fireSalt(s, h, d, w) {
@@ -490,6 +583,7 @@ export class Game {
     const w = WEAPON_BY_ID[p.type];
     p.age += dt;
     if (p.rest) {
+      if (p.stuckTo) { p.x = p.stuckTo.x + p.dx; p.y = p.stuckTo.y + p.dy; }
       if (p.fuse && p.age >= p.fuse) return 'explode';
       return null;
     }
@@ -502,8 +596,15 @@ export class Game {
       if (ny > this.waterY + 6) return 'remove';
       if (nx < -200 || nx > this.W + 200 || ny > this.H + 200) return 'remove';
       const hitSnail = p.age > 0.12 || p.type !== 'bazooka' ? this.snailAt(nx, ny, p.age < 0.25 ? p.owner : null) : null;
-      if (this.terrain.solid(nx, ny) || (p.type === 'bazooka' && hitSnail)) {
-        if (p.type === 'bazooka') { p.x = nx; p.y = ny; return 'explode'; }
+      if (this.terrain.solid(nx, ny) || ((w.contact || w.sticky) && hitSnail)) {
+        if (w.contact) { p.x = nx; p.y = ny; return 'explode'; }
+        if (w.sticky) {
+          // slime sticks where it lands, or to the snail it hits (and follows it)
+          if (hitSnail) { p.stuckTo = hitSnail; p.dx = p.x - hitSnail.x; p.dy = p.y - hitSnail.y; }
+          p.rest = true; p.vx = 0; p.vy = 0;
+          if (!sim) sfx.splat();
+          break;
+        }
         // bounce: estimate surface normal
         let nxs = 0, nys = 0;
         for (const u of RING16) {
@@ -568,6 +669,11 @@ export class Game {
     this.terrain.explode(x, y, r);
     this.shake = Math.min(20, r * 0.35);
     sfx.explode(sizeMul);
+    // crates in the blast go off next tick
+    for (let i = this.crates.length - 1; i >= 0; i--) {
+      const c = this.crates[i];
+      if (dhypot(c.x - x, c.y - 8 - y) < r + 10) { this.crates.splice(i, 1); this.pendingBooms.push({ x: c.x, y: c.y - 8, r: 22, dmg: 20 }); }
+    }
     const reach = r * 1.5;
     for (const s of this.snails) {
       if (!s.alive) continue;
@@ -630,6 +736,7 @@ export class Game {
     if (!cam.manual) {
       let tgt = cam.target;
       if (this.projectiles.length) tgt = this.projectiles[this.projectiles.length - 1];
+      else if (this.phase === 'aim' && this.active && !this.hasFired && WEAPON_BY_ID[this.weaponId].marker) tgt = { x: this.markerX, y: this.active.y - 80 };
       else if (this.phase === 'aim' || this.phase === 'retreat') tgt = this.active;
       if (tgt) {
         const k = 1 - Math.pow(0.02, dt);
@@ -679,7 +786,7 @@ export class Game {
     for (let i = 0; i < maxSteps; i++) {
       if (i % 3 === 0) pts.push({ x: p.x, y: p.y });
       const r = this.stepProjectile(p, dt, true);
-      if (r === 'explode' || (weaponId === 'granat' && (p.rest || Math.abs(p.vx) + Math.abs(p.vy) < 60 && i > 5))) { pts.push({ x: p.x, y: p.y, hit: true }); break; }
+      if (r === 'explode' || (w.fuse && (p.rest || Math.abs(p.vx) + Math.abs(p.vy) < 60 && i > 5))) { pts.push({ x: p.x, y: p.y, hit: true }); break; }
       if (r === 'remove') break;
     }
     return pts;
@@ -687,9 +794,11 @@ export class Game {
 
   planShot(s, target, forceFacing = 0) {
     const facing = forceFacing || Math.sign(target.x - s.x) || s.facing;
+    const team = this.teams[s.team];
     let best = null;
-    for (const wid of ['bazooka', 'granat']) {
+    for (const wid of ['bazooka', 'granat', 'slem']) {
       const w = WEAPON_BY_ID[wid];
+      if (!(team.ammo[wid] > 0)) continue;
       for (let ai = -60; ai <= 80; ai += 5) {
         const aim = (ai * Math.PI) / 180;
         for (let pw = 0.3; pw <= 1.001; pw += 0.1) {
@@ -704,7 +813,7 @@ export class Game {
             const df = dhypot(hit.x - o.x, hit.y - (o.y - 10));
             if (df < w.radius * 1.5) friendly += 40;
           }
-          const score = dt + friendly + (wid === 'granat' ? 8 : 0);
+          const score = dt + friendly + (wid === 'granat' ? 8 : wid === 'slem' ? 4 : 0);
           if (!best || score < best.score) best = { weapon: wid, aim, power: pw, facing, score, dist: dt };
         }
       }
@@ -732,8 +841,13 @@ export class Game {
       if (ai.t < 0.7) return;
       ai.t = 0;
       // close-range options first
-      if (canTurn && dist < 60 && Math.abs(tgt.y - s.y) < 30) {
+      const team = this.teams[s.team];
+      if (canTurn && dist < 60 && Math.abs(tgt.y - s.y) < 30 && team.ammo.dynamit > 0) {
         ai.plan = { weapon: 'dynamit', facing: wantFacing, aim: 0, power: 1 };
+        ai.state = 'aim'; return;
+      }
+      if (team.ammo.saltregn > 0 && this.openToSky(tgt) && !this.snails.some((o) => o.alive && o.team === s.team && Math.abs(o.x - tgt.x) < 80 && Math.abs(o.y - tgt.y) < 60)) {
+        ai.plan = { weapon: 'saltregn', markerX: tgt.x, facing: s.facing, aim: s.aim, power: 1 };
         ai.state = 'aim'; return;
       }
       if (canTurn && dist < 200 && this.lineOfSight(s, tgt)) {
@@ -769,6 +883,14 @@ export class Game {
       // Everything goes through inputs so the recording reproduces the turn.
       const plan = ai.plan;
       inp.weapon = plan.weapon;
+      if (WEAPON_BY_ID[plan.weapon].marker) {
+        if (this.weaponId !== plan.weapon) return; // wait for the sim to apply the weapon and place the marker
+        const d = plan.markerX - this.markerX;
+        if (Math.abs(d) > 4) { if (d > 0) inp.right = true; else inp.left = true; return; }
+        ai.state = 'charge'; ai.t = 0;
+        inp.fire = true;
+        return;
+      }
       if (s.facing !== plan.facing) { if (plan.facing > 0) inp.right = true; else inp.left = true; return; }
       const diff = plan.aim - s.aim;
       if (Math.abs(diff) > 0.015) { if (diff > 0) inp.up = true; else inp.down = true; return; }
@@ -799,6 +921,12 @@ export class Game {
       // retreat a little after dynamite
       if (ai.plan?.weapon === 'dynamit') { if (ai.plan.facing > 0) inp.left = true; else inp.right = true; }
     }
+  }
+
+  // Nothing solid between the sky and the snail's head.
+  openToSky(t) {
+    for (let y = t.y - 34; y >= 0; y -= 4) if (this.terrain.solid(t.x, y)) return false;
+    return true;
   }
 
   lineOfSight(a, b) {
@@ -885,9 +1013,50 @@ export class Game {
       }
     }
 
+    // crates
+    for (const c of this.crates) {
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      if (!c.landed && c.chute) {
+        ctx.fillStyle = c.type === 'health' ? '#ff8a80' : '#ffd54f';
+        ctx.beginPath(); ctx.arc(0, -38, 17, Math.PI, 0); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(-17, -38); ctx.lineTo(-8, -16); ctx.moveTo(17, -38); ctx.lineTo(8, -16); ctx.moveTo(0, -38); ctx.lineTo(0, -16); ctx.stroke();
+      }
+      ctx.fillStyle = '#c48a4a';
+      ctx.fillRect(-9, -16, 18, 16);
+      ctx.strokeStyle = '#6e4324'; ctx.lineWidth = 1.5;
+      ctx.strokeRect(-9, -16, 18, 16);
+      ctx.beginPath(); ctx.moveTo(-9, -8); ctx.lineTo(9, -8); ctx.moveTo(0, -16); ctx.lineTo(0, 0); ctx.stroke();
+      if (c.type === 'health') {
+        ctx.fillStyle = '#e2453c';
+        ctx.fillRect(-2, -13, 4, 10); ctx.fillRect(-5, -10, 10, 4);
+      } else {
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 11px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('?', 0, -4);
+      }
+      ctx.restore();
+    }
+
     // aim crosshair + trajectory preview
     const a = this.active;
-    if (a && a.alive && this.phase === 'aim' && !this.hasFired) {
+    if (a && a.alive && this.phase === 'aim' && !this.hasFired && WEAPON_BY_ID[this.weaponId].marker) {
+      // ground marker for salt rain
+      const mx = this.markerX;
+      ctx.setLineDash([6, 6]);
+      ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(mx, 0); ctx.lineTo(mx, this.H); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#fff';
+      for (let i = -2; i <= 2; i++) {
+        ctx.beginPath(); ctx.moveTo(mx + i * 24, 12 + Math.abs(i) * 6); ctx.lineTo(mx + i * 24 - 5, 2 + Math.abs(i) * 6); ctx.lineTo(mx + i * 24 + 5, 2 + Math.abs(i) * 6); ctx.closePath(); ctx.fill();
+      }
+      ctx.strokeStyle = 'rgba(255,90,60,0.9)';
+      ctx.beginPath(); ctx.moveTo(mx - 10, this.terrain.groundBelow(mx, 0)); ctx.lineTo(mx + 10, this.terrain.groundBelow(mx, 0)); ctx.stroke();
+    } else if (a && a.alive && this.phase === 'aim' && !this.hasFired) {
       const h = this.headPos(a), d = this.aimDir(a);
       if (!this.ai) {
         const pw = this.charging ? Math.max(0.15, this.power) : 0.65;
@@ -948,6 +1117,19 @@ export class Game {
         ctx.strokeStyle = '#1f3a1f'; ctx.lineWidth = 1; ctx.stroke();
         ctx.fillStyle = '#888'; ctx.fillRect(-2, -9, 4, 4);
         this.fuseLabel(ctx, p);
+      } else if (p.type === 'slem') {
+        ctx.fillStyle = '#7ccf3a';
+        ctx.strokeStyle = '#3f7a1c'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(-4, 6 + (p.rest ? 2 : 0), 2.5, 0, Math.PI * 2); ctx.arc(5, 5, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath(); ctx.arc(-2, -3, 2, 0, Math.PI * 2); ctx.fill();
+        this.fuseLabel(ctx, p, -13);
+      } else if (p.type === 'saltregn') {
+        ctx.rotate(0.6 + p.age * 3);
+        ctx.fillStyle = '#fff';
+        ctx.strokeStyle = 'rgba(120,140,160,0.9)'; ctx.lineWidth = 1;
+        ctx.fillRect(-4, -4, 8, 8); ctx.strokeRect(-4, -4, 8, 8);
       } else if (p.type === 'dynamit') {
         ctx.fillStyle = '#c62828';
         roundRect(ctx, -4, -14, 8, 14, 2); ctx.fill();
@@ -1046,6 +1228,8 @@ export class Game {
       teams: this.teams.map((t) => ({ name: t.name, color: t.color, hp: t.snails.reduce((a, s) => a + (s.alive ? s.hp : 0), 0), alive: t.snails.filter((s) => s.alive).length })),
       ai: !!this.ai,
       turn: this.turnCount,
+      ammo: this.active ? this.teams[this.active.team].ammo : null,
+      crates: this.crates.length,
     };
   }
 }
