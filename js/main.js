@@ -3,6 +3,8 @@ import { SNAIL_STYLES, TEAM_COLORS } from './snails.js';
 import { unlockAudio } from './audio.js';
 import { LANGS, t, fmt, setLang, getLang, detectLang, applyDom } from './i18n.js';
 import { initAnalytics, track, setAnalyticsLang } from './analytics.js';
+import { platform } from './platform.js';
+import { setMuted, isMuted } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -90,6 +92,7 @@ track('app_open', {
   installed: matchMedia('(display-mode: standalone)').matches || navigator.standalone === true,
   touch: matchMedia('(pointer: coarse)').matches,
   w: innerWidth, h: innerHeight,
+  platform: platform.id,
 });
 let matchStats = null; // { t0, weapons } for the running match
 
@@ -135,7 +138,17 @@ function readConfig() {
   return { teams: rows, snailsPerTeam: settings.per, style: settings.style };
 }
 
-function startGame() {
+let starting = false;
+async function startGame() {
+  if (starting) return;
+  starting = true;
+  try {
+    // portals show an ad between matches; audio is muted meanwhile
+    if (game || platform.id !== 'web') {
+      const wasMuted = isMuted();
+      await platform.commercialBreak(() => setMuted(true), () => setMuted(wasMuted));
+    }
+  } finally { starting = false; }
   unlockAudio();
   const cfg = readConfig();
   // ?seed=1234 gives a reproducible map and match (used by tests and for sharing)
@@ -152,6 +165,7 @@ function startGame() {
         weapons: matchStats.weapons,
       });
       matchStats = null;
+      platform.gameplayStop();
       setTimeout(() => {
         $('go-title').textContent = winner ? t('go.win', { name: winner.name }) : t('go.draw');
         gameover.hidden = false;
@@ -161,6 +175,7 @@ function startGame() {
     onFire: (g) => { if (matchStats) matchStats.weapons[g.weaponId] = (matchStats.weapons[g.weaponId] || 0) + 1; },
   });
   track('match_start', { teams: cfg.teams.length, per: cfg.snailsPerTeam, humans: cfg.teams.filter((tm) => !tm.ai).length, style: cfg.style });
+  platform.gameplayStart();
   window.__game = game;
   buildWeaponBar();
   menu.hidden = true;
@@ -179,7 +194,7 @@ function reportAbandon() {
 }
 
 function toMenu() {
-  if (game && game.phase !== 'over') reportAbandon();
+  if (game && game.phase !== 'over') { reportAbandon(); platform.gameplayStop(); }
   gameover.hidden = true;
   hud.hidden = true;
   menu.hidden = false;
@@ -395,12 +410,19 @@ function frame(ts) {
 }
 requestAnimationFrame(frame);
 
+// ---------- platform ----------
+if (!platform.allowExternalLinks) {
+  for (const a of document.querySelectorAll('a[href]')) a.hidden = true;
+  $('btn-install').hidden = true;
+}
+platform.init().then(() => platform.loaded());
+
 // ---------- PWA ----------
 let deferredPrompt = null;
 addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredPrompt = e;
-  $('btn-install').hidden = false;
+  if (platform.id === 'web') $('btn-install').hidden = false;
 });
 $('btn-install').addEventListener('click', async () => {
   if (!deferredPrompt) return;
@@ -409,7 +431,7 @@ $('btn-install').addEventListener('click', async () => {
   deferredPrompt = null;
   $('btn-install').hidden = true;
 });
-if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+if (platform.useServiceWorker && 'serviceWorker' in navigator && location.protocol !== 'file:') {
   addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').then(() => {
       $('offline-hint').dataset.ready = '1';

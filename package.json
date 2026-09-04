@@ -8,7 +8,8 @@
     "start": "python3 -m http.server 8080",
     "test": "node test/determinism.test.mjs",
     "test:browser": "node test/browser.test.mjs",
-    "test:all": "npm test && npm run test:browser"
+    "test:all": "npm test && npm run test:browser",
+    "build:itch": "node scripts/build-itch.mjs"
   },
   "license": "UNLICENSED",
   "devDependencies": {

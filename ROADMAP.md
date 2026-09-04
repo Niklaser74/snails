@@ -128,4 +128,4 @@ Räkneexempel med försiktiga antaganden, inte prognos:
 3. ~~Två nya vapen och lådor~~ – klart 2026-09-04 (Slemklot, Saltregn, ammunition, lådor).
 4. ~~Tutorial och engelsk översättning av all text~~ – klart 2026-09-04.
 5. ~~Mätning på plats~~ – klart 2026-09-04 (Supabase, se `supabase/README.md`).
-6. Ladda upp på itch.io och skicka in till Poki.
+6. Ladda upp på itch.io och skicka in till Poki – kodsidan klar 2026-09-04 (byggskript, release-workflow, Poki-SDK-adapter, butikstexter och bilder i `docs/store/`). Kvar: konton, uppladdning och inskick, se `docs/store/itch.md` och `docs/store/poki.md`.

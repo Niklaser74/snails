@@ -78,6 +78,15 @@ CI vid varje push.
 för att upptäcka om två körningar glider isär. Det här är grunden för replays,
 asynkront multiplayer och serversidig verifiering.
 
+## Distribution
+
+- `npm run build:itch` bygger `dist/snackmageddon-itch.zip` för itch.io. Arbetsflödet
+  *Release build* gör samma sak vid en versionstagg och kan pusha med butler,
+  se `docs/store/itch.md`.
+- `js/platform.js` känner av var spelet körs (egen sajt, itch.io, Poki) och kopplar in
+  Pokis SDK bara där. `?platform=poki` tvingar läget för test. Se `docs/store/poki.md`.
+- Butikstexter, omslag och skärmdumpar ligger i `docs/store/`.
+
 ## Struktur
 
 ```
@@ -93,6 +102,10 @@ js/audio.js           syntetiserade ljudeffekter
 js/rng.js             seedad slump, shuffle, tillståndshash
 js/dmath.js           motoroberoende sin/cos/atan2
 js/i18n.js            ordlista svenska/engelska
+js/analytics.js       anonym räknare (Supabase)
+js/platform.js        plattformsadapter (web, itch.io, Poki)
+scripts/build-itch.mjs paketering för itch.io
+docs/store/           butikstexter och bilder
 test/                 determinism- och webbläsartester (körs i CI)
 design/snails.html    designförslag
 icons/                app-ikoner
