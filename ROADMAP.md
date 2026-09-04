@@ -1,133 +1,102 @@
 # Snäckmageddon – utvecklingsplan
 
-Status: MVP live på https://snails.se/ (2026-09-04).
-Lokalt hotseat + AI, 4 vapen, förstörbar terräng, 5 snäckstilar, PWA offline.
+Uppdaterad 2026-09-04, kväll. Spelet är publikt på https://knackpot.itch.io/snailmageddon
+och https://niklaser74.github.io/snails/ (snails.se när DNS:en är på plats).
 
 ## Tesen: dra spelet mot asynkront multiplayer
 
-Worms är ett soffspel. Vår snäcka är långsam, och det ska vi göra till en styrka:
+Worms är ett soffspel. Vår snäcka är långsam, och det gör vi till en styrka:
 **Snigelpost** – man spelar sitt drag när man hinner, motståndaren får en notis
-och svarar när den hinner. Som Wordfeud, fast med bazooka. Det passar mobilen,
-passar temat, och kräver ingen realtidsnätkod. Det är också det som gör spelet
-till något man återkommer till varje dag, vilket är förutsättningen för intäkter.
+och svarar när den hinner. Som Wordfeud, fast med bazooka. Det är det som gör
+spelet till något man återkommer till varje dag, vilket är förutsättningen för
+intäkter. Snigelpost finns nu, med push-notiser. Resten av planen handlar om
+att göra det hållbart, roligare och till slut lönsamt.
 
-Allt annat i planen bygger mot det: deterministisk simulering först, sedan
-konton och matcher, sedan progression och kosmetik.
+## Läget per fas
 
-## Fas 1 – Känsla och kärnloop (2–3 veckor)
+### Fas 1 – Känsla och kärnloop
+| Klart | Kvar |
+|---|---|
+| Kamerapunch vid explosioner | Slow motion vid dödsskott, skal som spricker, slemspår |
+| Slemklot, Saltregn, ammunition, lådor | Skalstöt (dash), Snigelhopp (teleport) |
+| Guide i första matchen | AI-svårighetsgrader |
+| Tester i CI (Node + Playwright) | Terrängteman (trädgårdsland, strand, regnskog) |
+| Förhandsbana vid sikte | Inställningar: dragtid, plötslig död, ljud av/på, gamepad |
+| | Riktigt ljud: bättre syntes eller inspelade ljud, musik |
 
-Målet är att en match ska kännas bra att spela klart och vilja spelas igen.
+### Fas 2 – Snigelpost
+| Klart | Kvar |
+|---|---|
+| Deterministisk simulering, replay, hash | E-postkoppling av kontot (magic link) |
+| Anonyma konton, matcher, drag, inbjudan via länk | Ge upp, revansch, automatisk förlust efter 14 dagars tystnad |
+| Motståndarens drag i 3× med hoppa över | Åskådarläge och delbar replay av färdig match |
+| Push-notiser (egen Web Push, VAPID i Vault) | Serversidig verifiering av drag (edge-funktion kör simuleringen) |
+| Väntläge med automatisk uppdatering | Städjobb: gamla öppna matcher, döda prenumerationer |
 
-- **Juice.** Kamerazoom mot träffar, kort slow motion vid dödsskott, skal som
-  spricker, slemspår efter snäckorna, bättre ljud (fortfarande syntetiserat).
-- **Fler vapen.** Slemklot (klibbar fast där det landar, smäller efter 2 s),
-  Saltregn (luftanfall över ett valt område), Skalstöt (kort dash som knuffar),
-  Hemlig teleport "Snigelhopp". Max 8 vapen totalt, ammunition per match.
-- **Lådor.** Hälsolådor och vapenlådor faller ner mellan dragen. Ger anledning
-  att röra sig.
-- **Terrängteman.** Trädgårdsland (Achatina är faktiskt ett skadedjur där),
-  strand, regnskog. Tema = palett + gräsfärg + rekvisita, samma generator.
-- **Svårighetsgrader för AI** (lätt: siktar fel med avsikt, svår: dagens AI).
-- **Inställningar.** Dragtid, antal vapen, plötslig död på/av. Gamepad-stöd.
-- **Tutorial.** Tre steg första gången: gå, sikta, skjut.
-- **Testinfrastruktur.** Playwright-skripten från utvecklingen in i repot
-  (`test/`), körs i CI vid varje push.
+### Fas 3 – Progression och identitet (ej påbörjad)
+Profil, kosmetik (intäktsytan), "Dagens skott" med topplista, rank och säsonger.
+Förutsätter e-postkoppling, annars försvinner köp när webbläsardata rensas.
 
-## Fas 2 – Snigelpost, asynkront multiplayer (4–6 veckor)
+### Fas 4 – Distribution
+| Klart | Kvar |
+|---|---|
+| itch.io, publik, butler-push från CI | Poki-inskick (länk och checklista i `docs/store/poki.md`) |
+| Poki-SDK-adapter i koden | snails.se: DNS i Cloudflare, custom domain i GitHub Pages |
+| Svenska och engelska | Google Play via PWABuilder, App Store via Capacitor (efter fas 3) |
+| Mätning i Supabase | |
 
-- ~~**Deterministisk simulering**~~ – klart 2026-09-04.
-- ~~**Konton.** Anonymt konto vid första start~~ – klart 2026-09-04. Kvar:
-  uppgradera med e-post (magic link) så kontot överlever ett byte av enhet.
-- ~~**Matcher.** Seed, regler och en logg av drag; motståndarens drag spelas upp
-  som replay~~ – klart 2026-09-04 (`snails_matches`, `snails_turns`).
-- ~~**Inbjudan via länk.**~~ – klart 2026-09-04.
-- ~~**Notiser.** Web Push när det är din tur~~ – klart 2026-09-04 (edge-funktionen
-  `notify-turn`, VAPID i Vault, knapp i väntläget).
-- **Åskådarläge.** Vem som helst med länken kan titta på replayen.
-- **Serversidig verifiering.** Edge function som spelar upp draget headless och
-  jämför hash innan det godkänns.
+## Lärdomar från första dagen, som blir arbete
 
-## Fas 3 – Progression och identitet (3–4 veckor)
+- **Snigelpost delar databas med nissebus.** Det fungerar, men anonyma spelare
+  får rollen `authenticated` i hela projektet och triggern för nya användare
+  fick ändras. Två policyer i nissebus (`pranks`) släpper in alla inloggade.
+  Beslut: täpp till dem nu, flytta Snigelpost till eget projekt när det finns
+  spelare som motiverar 10 USD/mån.
+- **Regelversion mitt i en match.** När fysiken ändras (ny `RULES_VERSION`) kan
+  pågående matcher inte spelas vidare. Innan nästa balansändring behövs en
+  strategi: antingen frysa gamla versioner av simuleringen som separata
+  filer och välja rätt per match, eller bara ändra regler när inga matcher
+  pågår. Det första är rätt på sikt.
+- **Inbjudningslänkar delas i chattar.** Utan Open Graph-taggar visas länken
+  utan bild och text. Billig och viktig detalj för spridning.
+- **Vi ser inga fel i produktion.** Klientfel bör skickas som en händelse i
+  mätningen, annars upptäcks buggar först när någon klagar.
+- **Ingen ljud-av-knapp.** Första sak folk letar efter på jobbet.
 
-- **Profil.** Namn, valt lag, statistik (vinster, skott, längsta bazooka).
-- **Kosmetik.** Skal, hattar, ögon, slemfärg, segergest. Det här är
-  intäktsytan, se nedan. Grundutbudet gratis och upplåsbart.
-- **Dagens skott.** Ett delat seed per dag: samma bana för alla, ett skott,
-  topplista. Billigt att bygga, ger daglig anledning att öppna appen.
-- **Rank och säsonger.** Enkel Elo, säsong på 8 veckor med belöningsskal.
+## Tekniska beslut (bekräftade)
 
-## Fas 4 – Distribution (löpande från fas 1)
+1. Deterministisk simulering med fast tidssteg och egen matte – i drift.
+2. Indata som händelser, inspelning per drag – i drift.
+3. Regelversion per match – i drift, men se lärdomen ovan.
+4. Mätning från dag ett – i drift (`snails_daily_metrics`, `snails_retention`).
 
-- ~~**itch.io** direkt~~ – publik 2026-09-04: https://knackpot.itch.io/snailmageddon
-- **Poki och CrazyGames.** Webbspelsportaler med egna spelare och
-  annonsintäkter som delas med utvecklaren. Kräver deras SDK och en QA-runda.
-- **Google Play** via PWABuilder/TWA. Nästan ingen extra kod.
-- **App Store** via Capacitor-omslag när kosmetik finns att sälja.
-- **Engelska.** Gör spelet tvåspråkigt före portalerna. Svensk marknad ensam
-  är för liten.
+## Intäkter (oförändrat)
 
-## Fas 5 – Bara om det tar fart
-
-- Realtidslobby (Supabase Realtime), turneringar, baneditor med delning,
-  Discord Activity.
-
-## Tekniska beslut som ska tas nu
-
-1. **Deterministisk simulering.** Fast tidssteg (60 Hz), seedad slump,
-   separat slumpgenerator för rendering (skakning, eldflammor) så att den inte
-   rör simuleringen. Simuleringen ska kunna köras utan canvas i Node.
-   Det ger: små replays (bara indata), serversidig verifiering av resultat,
-   delbara höjdpunkter och möjlighet att testa fysiken automatiskt.
-2. **Indata som händelser.** Spelaren producerar en ström av `(tick, input)`,
-   simuleringen konsumerar den. Lokal spelare, AI och replay blir samma sak.
-3. **Regelversion i matchen.** Varje match sparar `rulesVersion` så gamla
-   replays fortsätter fungera när balansen ändras.
-4. **Mätning från dag ett.** Integritetsvänlig analys (t.ex. Plausible eller
-   en egen räknare i Supabase): startade matcher, avslutade matcher, drag per
-   match, återkomst dag 1/7. Utan det går det inte att fatta intäktsbeslut.
-
-## Intäkter
-
-Grundregel: spelet är gratis, inget som köps ger fördel i matchen, inga
-lootboxar. Det håller spelet rättvist, undviker konsumenträttsproblem i EU och
-är det som fungerar bäst för ett spel man spelar med vänner.
-
-| Modell | När | Insats | Bedömning |
-|---|---|---|---|
-| Annonsdelning via portaler (Poki, CrazyGames) | Fas 1–2 | SDK + QA | Första kronorna, noll egen infrastruktur. |
-| Kosmetik (skal, hattar, slem) via Stripe på webben | Fas 3 | Konton + butik | Huvudintäkten. Ingen butiksavgift på webben. |
-| Samma kosmetik via Play/App Store | Fas 4 | IAP-integration | 15–30 % avgift, men når fler. |
-| Snäckpass, säsongsprenumeration | Fas 3+ | Säsongsinnehåll | Stabil intäkt om det finns återkommande spelare. |
-| Belönad reklam (se en annons, få en låda) | Fas 3 | Annons-SDK | Bra komplement, aldrig tvingande. |
-| Betala vad du vill på itch.io | Fas 1 | Ingen | Symboliskt, men ger tidiga signaler. |
-
-Rekommenderad ordning: portaler först för spelare och små intäkter, sedan
-kosmetik när Snigelpost och konton finns. Kosmetik utan återkommande spelare
-säljer inte, så fas 2 måste komma före fas 3.
-
-Räkneexempel med försiktiga antaganden, inte prognos:
-
-| Aktiva spelare/mån | Annonser via portal | Kosmetik (2 % köper, 60 kr) |
-|---|---|---|
-| 1 000 | 100–300 kr | 1 200 kr |
-| 10 000 | 1 000–3 000 kr | 12 000 kr |
-| 100 000 | 10 000–30 000 kr | 120 000 kr |
-
-## Risker
-
-- **Worms-IP.** Använd aldrig "Worms" i namn eller marknadsföring, ha egen
-  grafik och egna vapennamn. Genren är fri, varumärket är det inte.
-- **Ingen återkomst.** Utan Snigelpost och notiser är spelet en engångsgrej.
-- **Barn spelar.** Håll köpflöden tydliga, inga mörka mönster, ingen chatt
-  utan moderering. Anonyma konton som standard minimerar persondata (GDPR).
-- **Fysiken ändras med multiplayer.** Deterministisk simulering först,
-  annars byggs alla matcher om senare.
+Gratis spel, inget köpbart ger fördel, inga lootboxar. Ordning: portaler
+(itch.io klart, Poki nästa) för spelare och små intäkter, sedan kosmetik via
+Stripe när e-postkoppling finns, sedan säsongspass och belönad reklam.
 
 ## Nästa två veckor
 
-1. ~~Deterministisk simulering och indata-händelser~~ – klart 2026-09-04.
-2. ~~Testerna in i repot och CI~~ – klart 2026-09-04 (Node + Playwright).
-3. ~~Två nya vapen och lådor~~ – klart 2026-09-04 (Slemklot, Saltregn, ammunition, lådor).
-4. ~~Tutorial och engelsk översättning av all text~~ – klart 2026-09-04.
-5. ~~Mätning på plats~~ – klart 2026-09-04 (Supabase, se `supabase/README.md`).
-6. ~~Ladda upp på itch.io~~ – publik 2026-09-04 på https://knackpot.itch.io/snailmageddon, butler-push från CI. Kvar: skicka in till Poki när snails.se är uppe, se `docs/store/poki.md`.
+1. **Snigelpost robust**, eftersom riktiga spelare finns nu: ge upp, revansch,
+   automatisk förlust efter tystnad, städjobb, Open Graph-taggar på
+   inbjudningslänkar, felrapportering till mätningen.
+2. **Ljud och inställningar**: ljud av/på i HUD:en, dragtid, plötslig död,
+   bättre ljud, slow motion vid dödsskott.
+3. **De två sista vapnen och AI-nivåer** (lätt, normal, svår).
+4. **E-postkoppling** av kontot, grunden för fas 3 och för att inte tappa
+   spelare vid byte av telefon.
+5. **snails.se och Poki-inskick** när DNS:en är på plats.
+6. **Versionsstrategi för simuleringen** innan nästa regeländring.
+
+Därefter fas 3, med "Dagens skott" först eftersom det är billigast och ger
+daglig återkomst utan att kräva kosmetik.
+
+## Risker
+
+- **Worms-varumärket.** Aldrig i namn eller marknadsföring. Genren är fri.
+- **Anonyma konton som försvinner.** Tills e-postkoppling finns förlorar en
+  spelare sina matcher om webbläsardata rensas. Säg det i gränssnittet.
+- **Missbruk av anonym inloggning.** Supabase rekommenderar captcha. Vänta med
+  det tills mätningen visar problem, friktionen kostar mer än nyttan i början.
+- **Barn spelar.** Rena köpflöden, inga mörka mönster, ingen fri chatt.
