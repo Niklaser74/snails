@@ -1,6 +1,14 @@
 import { Terrain } from './terrain.js';
 import { drawSnail, shade } from './snails.js';
 import { sfx } from './audio.js';
+import { mulberry32, shuffle, Hasher } from './rng.js';
+import { dsin, dcos, dhypot, datan2 } from './dmath.js';
+
+// Bump when physics or rules change so old recordings are not replayed with
+// new rules.
+export const RULES_VERSION = 1;
+// Fixed simulation step. The sim only ever advances by exactly this much.
+export const TICK = 1 / 60;
 
 export const WEAPONS = [
   { id: 'bazooka', name: 'Bazooka', icon: '🚀', radius: 36, dmg: 48, wind: true, charge: true, speed: 900 },
@@ -26,33 +34,58 @@ const TURN_TIME = 45;
 const RETREAT_TIME = 4;
 const SUDDEN_DEATH_TURN = 16;
 
-function mulberry32(a) {
-  return function () {
-    a |= 0; a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+const PHASES = ['init', 'aim', 'retreat', 'settle', 'over'];
+const INPUT_KEYS = ['left', 'right', 'up', 'down', 'fire', 'jump', 'weapon'];
+export function emptyInput() {
+  return { left: false, right: false, up: false, down: false, fire: false, jump: false, weapon: 'bazooka' };
 }
+function sameInput(a, b) {
+  for (const k of INPUT_KEYS) if (a[k] !== b[k]) return false;
+  return true;
+}
+// unit vectors around a circle, for surface-normal sampling (engine-independent)
+const RING16 = Array.from({ length: 16 }, (_, a) => {
+  const ang = (a / 16) * 6.283185307179586;
+  return { x: dcos(ang), y: dsin(ang) };
+});
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, k) => a + (b - a) * k;
 
 export class Game {
-  constructor(canvas, config, hooks = {}) {
-    this.canvas = canvas;
-    this.ctx = canvas.getContext('2d');
+  // canvas may be null: the game then runs headless (Node, tests, server).
+  // opts.replay: a recording from game.recording; inputs are taken from it and
+  // the AI is disabled, so the match plays back exactly as it was played.
+  constructor(canvas, config, hooks = {}, opts = {}) {
+    this.canvas = canvas || null;
+    this.headless = !canvas;
+    this.ctx = canvas ? canvas.getContext('2d') : null;
     this.config = config;
     this.hooks = hooks;
     this.W = 1800;
     this.H = 800;
     this.style = config.style || 'cartoon';
-    this.rng = mulberry32(config.seed ?? (Math.random() * 1e9) | 0);
-    this.terrain = new Terrain(this.W, this.H, this.rng);
+    this.replay = opts.replay || null;
+    this.seed = (this.replay ? this.replay.seed : (config.seed ?? (Math.random() * 1e9))) | 0;
+    this.rng = mulberry32(this.seed); // simulation only
+    this.airng = mulberry32(this.seed ^ 0x2545f491); // AI decisions (recorded as inputs, never touches the sim rng)
+    this.vrng = mulberry32(this.seed ^ 0x5bd1e995); // visuals only
+    this.terrain = new Terrain(this.W, this.H, this.rng, { headless: this.headless });
     this.waterY = this.H - 42;
     this.time = 0;
+    this.tickCount = 0;
     this.turnCount = 0;
-    this.input = { left: false, right: false, up: false, down: false, fire: false, jump: false };
+    this.input = emptyInput(); // live input, written by the UI or the AI
+    this.frame = emptyInput(); // the snapshot the simulation reads this tick
     this.prevFire = false;
+    this.recording = {
+      rulesVersion: RULES_VERSION,
+      seed: this.seed,
+      teams: config.teams.map((t) => ({ name: t.name, color: t.color, ai: !!t.ai })),
+      snailsPerTeam: config.snailsPerTeam || 3,
+      inputs: [],
+    };
+    this.lastRecorded = null;
+    this.replayIdx = 0;
     this.projectiles = [];
     this.particles = [];
     this.popups = [];
@@ -62,14 +95,65 @@ export class Game {
     this.message = '';
     this.messageTimer = 0;
     this.clouds = Array.from({ length: 8 }, () => ({
-      x: this.rng() * this.W, y: 40 + this.rng() * 220, s: 0.6 + this.rng() * 0.9, v: 4 + this.rng() * 8,
+      x: this.vrng() * this.W, y: 40 + this.vrng() * 220, s: 0.6 + this.vrng() * 0.9, v: 4 + this.vrng() * 8,
     }));
     this.buildTeams();
     this.startTurn();
   }
 
+  static fromRecording(canvas, rec, hooks = {}, style = 'cartoon') {
+    if (rec.rulesVersion !== RULES_VERSION) throw new Error(`Inspelningen har regelversion ${rec.rulesVersion}, spelet har ${RULES_VERSION}`);
+    return new Game(canvas, { teams: rec.teams, snailsPerTeam: rec.snailsPerTeam, style }, hooks, { replay: rec });
+  }
+
+  // ---------- fixed-step driver ----------
+  // One simulation step. Every input passes through here, so a match can be
+  // recorded as (tick, input) pairs and replayed bit for bit.
+  tick() {
+    if (this.replay) {
+      this.frame = this.replayInputAt(this.tickCount);
+    } else {
+      if (this.ai && (this.phase === 'aim' || this.phase === 'retreat')) this.updateAI(TICK);
+      this.frame = { ...this.input };
+      this.record(this.frame);
+    }
+    this.update(TICK);
+    this.tickCount++;
+  }
+
+  record(frame) {
+    if (this.lastRecorded && sameInput(this.lastRecorded, frame)) return;
+    this.recording.inputs.push([this.tickCount, { ...frame }]);
+    this.lastRecorded = { ...frame };
+  }
+
+  replayInputAt(tick) {
+    const list = this.replay.inputs;
+    let f = this.frame;
+    while (this.replayIdx < list.length && list[this.replayIdx][0] <= tick) {
+      f = { ...list[this.replayIdx][1] };
+      this.replayIdx++;
+    }
+    return f;
+  }
+
+  // Hash of everything the simulation depends on. Two games with the same
+  // seed and inputs must produce the same hash at every tick.
+  stateHash() {
+    const h = new Hasher();
+    h.int(this.tickCount).int(this.turnCount).int(this.teamIndex).byte(PHASES.indexOf(this.phase) + 1);
+    h.num(this.wind ?? 0).num(this.timer ?? 0).num(this.waterY).num(this.power ?? 0);
+    h.byte(this.charging ? 1 : 0).byte(this.hasFired ? 1 : 0).byte(WEAPONS.findIndex((w) => w.id === this.weaponId) + 1);
+    for (const s of this.snails) {
+      h.num(s.x).num(s.y).num(s.vx).num(s.vy).int(s.hp).byte(s.alive ? 1 : 0).byte(s.facing + 2).num(s.aim).byte(s.airborne ? 1 : 0).num(s.walkAcc);
+    }
+    for (const p of this.projectiles) h.num(p.x).num(p.y).num(p.vx).num(p.vy).num(p.age).byte(p.rest ? 1 : 0);
+    h.bytes(this.terrain.mask);
+    return h.hex();
+  }
+
   buildTeams() {
-    const names = [...SNAIL_NAMES].sort(() => this.rng() - 0.5);
+    const names = shuffle([...SNAIL_NAMES], this.rng);
     let ni = 0;
     this.teams = this.config.teams.map((t, ti) => ({
       index: ti, name: t.name, color: t.color, ai: !!t.ai, nextSnail: 0,
@@ -81,7 +165,7 @@ export class Game {
     // spread spawn columns across the map, shuffled, then alternate teams
     const slots = [];
     for (let i = 0; i < total; i++) slots.push(((i + 0.5) / total) * (this.W - 160) + 80);
-    slots.sort(() => this.rng() - 0.5);
+    shuffle(slots, this.rng);
     let si = 0;
     for (let k = 0; k < per; k++) {
       for (const team of this.teams) {
@@ -128,8 +212,8 @@ export class Game {
     this.charging = false;
     this.hasFired = false;
     this.weaponId = 'bazooka';
-    this.ai = team.ai ? { state: 'think', t: 0, plan: null, walkT: 0, tries: 0 } : null;
-    for (const k in this.input) this.input[k] = false;
+    this.ai = team.ai && !this.replay ? { state: 'think', t: 0, plan: null, walkT: 0, tries: 0 } : null;
+    Object.assign(this.input, emptyInput());
     this.prevFire = false;
     this.cam.manual = false;
     this.cam.target = s;
@@ -154,9 +238,10 @@ export class Game {
 
   say(text, t = 2) { this.message = text; this.messageTimer = t; }
 
+  // UI weapon choice. It becomes an input and is applied by the simulation.
   selectWeapon(id) {
-    if (this.phase !== 'aim' || this.charging || this.ai) return;
-    if (WEAPON_BY_ID[id]) this.weaponId = id;
+    if (this.ai || this.replay) return;
+    if (WEAPON_BY_ID[id]) this.input.weapon = id;
   }
 
   // ---------- update ----------
@@ -168,7 +253,6 @@ export class Game {
     for (const c of this.clouds) { c.x += c.v * dt; if (c.x > this.W + 200) c.x = -200; }
 
     if (this.phase === 'aim' || this.phase === 'retreat') {
-      if (this.ai) this.updateAI(dt);
       this.handleControl(dt);
     }
     if (this.phase === 'aim') {
@@ -203,7 +287,7 @@ export class Game {
       }
     }
     this.updateCamera(dt);
-    this.prevFire = this.input.fire;
+    this.prevFire = this.frame.fire;
   }
 
   killSnail(s) {
@@ -217,7 +301,7 @@ export class Game {
   handleControl(dt) {
     const s = this.active;
     if (!s || !s.alive) return;
-    const inp = this.input;
+    const inp = this.frame;
     s.walking = false;
     if (!s.airborne) {
       if (inp.left || inp.right) {
@@ -230,7 +314,8 @@ export class Game {
         }
       }
       if (inp.jump && !this.charging) {
-        inp.jump = false;
+        inp.jump = false; // one-shot: consumed here…
+        if (!this.replay) this.input.jump = false; // …and cleared in the live input so the recording agrees
         s.airborne = true;
         s.vy = -310;
         s.vx = s.facing * 130;
@@ -242,6 +327,7 @@ export class Game {
     if (inp.down) s.aim = clamp(s.aim - 1.6 * dt, -1.45, 1.45);
 
     if (this.phase === 'aim' && !this.hasFired) {
+      if (!this.charging && inp.weapon !== this.weaponId && WEAPON_BY_ID[inp.weapon]) this.weaponId = inp.weapon;
       const w = WEAPON_BY_ID[this.weaponId];
       const pressed = inp.fire && !this.prevFire;
       const released = !inp.fire && this.prevFire;
@@ -326,22 +412,23 @@ export class Game {
     s.alive = false; s.hp = 0; s.airborne = false;
     this.say(`${s.name} drunknade!`, 1.6);
     sfx.splash();
+    if (this.headless) return;
     for (let i = 0; i < 18; i++) this.particles.push({
-      x: s.x + (this.rng() - 0.5) * 20, y: this.waterY, vx: (this.rng() - 0.5) * 200, vy: -150 - this.rng() * 250,
-      life: 0.7 + this.rng() * 0.5, r: 2 + this.rng() * 3, color: '#a8d8ff', grav: 1,
+      x: s.x + (this.vrng() - 0.5) * 20, y: this.waterY, vx: (this.vrng() - 0.5) * 200, vy: -150 - this.vrng() * 250,
+      life: 0.7 + this.vrng() * 0.5, r: 2 + this.vrng() * 3, color: '#a8d8ff', grav: 1,
     });
   }
 
   damage(s, amount, kind) {
     if (!s.alive || amount <= 0) return;
     s.hp = Math.max(0, s.hp - amount);
-    this.popups.push({ x: s.x, y: s.y - 40, text: `-${amount}`, life: 1.3, color: s.color });
+    if (!this.headless) this.popups.push({ x: s.x, y: s.y - 40, text: `-${amount}`, life: 1.3, color: s.color });
     sfx.hurt();
   }
 
   // ---------- weapons ----------
   headPos(s) { return { x: s.x + s.facing * 14, y: s.y - 21 }; }
-  aimDir(s) { return { x: Math.cos(s.aim) * s.facing, y: -Math.sin(s.aim) }; }
+  aimDir(s) { return { x: dcos(s.aim) * s.facing, y: -dsin(s.aim) }; }
 
   fire(w, power) {
     const s = this.active;
@@ -373,8 +460,9 @@ export class Game {
     sfx.salt();
     const spread = [-0.07, 0, 0.07];
     for (const sp of spread) {
-      const a = Math.atan2(d.y, d.x) + sp;
-      const dx = Math.cos(a), dy = Math.sin(a);
+      // rotate the aim vector by the spread angle (no atan2 needed)
+      const cs = dcos(sp), sn = dsin(sp);
+      const dx = d.x * cs - d.y * sn, dy = d.x * sn + d.y * cs;
       let x = h.x + dx * 14, y = h.y + dy * 14;
       let hit = false;
       for (let i = 0; i < w.range; i += 2) {
@@ -382,9 +470,9 @@ export class Game {
         if (this.terrain.solid(x, y) || this.snailAt(x, y, s)) { hit = true; break; }
       }
       // tracer
-      this.particles.push({ x: h.x, y: h.y, x2: x, y2: y, life: 0.12, line: true, color: '#fff' });
+      if (!this.headless) this.particles.push({ x: h.x, y: h.y, x2: x, y2: y, life: 0.12, line: true, color: '#fff' });
       if (hit) this.explosion(x, y, w.radius, w.dmg, s, 0.4);
-      else this.particles.push({ x, y, vx: 0, vy: 0, life: 0.2, r: 3, color: '#fff' });
+      else if (!this.headless) this.particles.push({ x, y, vx: 0, vy: 0, life: 0.2, r: 3, color: '#fff' });
     }
   }
 
@@ -418,12 +506,11 @@ export class Game {
         if (p.type === 'bazooka') { p.x = nx; p.y = ny; return 'explode'; }
         // bounce: estimate surface normal
         let nxs = 0, nys = 0;
-        for (let a = 0; a < 16; a++) {
-          const ang = (a / 16) * Math.PI * 2;
-          const px = nx + Math.cos(ang) * 4, py = ny + Math.sin(ang) * 4;
-          if (this.terrain.solid(px, py) || (hitSnail && Math.abs(px - hitSnail.x) < 13 && py < hitSnail.y + 2 && py > hitSnail.y - 32)) { nxs -= Math.cos(ang); nys -= Math.sin(ang); }
+        for (const u of RING16) {
+          const px = nx + u.x * 4, py = ny + u.y * 4;
+          if (this.terrain.solid(px, py) || (hitSnail && Math.abs(px - hitSnail.x) < 13 && py < hitSnail.y + 2 && py > hitSnail.y - 32)) { nxs -= u.x; nys -= u.y; }
         }
-        const len = Math.hypot(nxs, nys) || 1;
+        const len = dhypot(nxs, nys) || 1;
         nxs /= len; nys /= len;
         if (len < 0.01) { nxs = 0; nys = -1; }
         const dot = p.vx * nxs + p.vy * nys;
@@ -433,7 +520,7 @@ export class Game {
         // push out
         p.x += nxs * 2; p.y += nys * 2;
         if (!sim) sfx.bounce();
-        if (Math.hypot(p.vx, p.vy) < 25) { p.rest = true; p.vx = 0; p.vy = 0; }
+        if (dhypot(p.vx, p.vy) < 25) { p.rest = true; p.vx = 0; p.vy = 0; }
         break;
       }
       p.x = nx; p.y = ny;
@@ -458,8 +545,8 @@ export class Game {
         }
         continue;
       }
-      if (p.type === 'bazooka' && this.time % 0.05 < dt) {
-        this.particles.push({ x: p.x, y: p.y, vx: (this.rng() - 0.5) * 20, vy: -20, life: 0.5, r: 3, color: 'rgba(200,200,200,0.7)', grow: 1 });
+      if (p.type === 'bazooka' && !this.headless && this.tickCount % 3 === 0) {
+        this.particles.push({ x: p.x, y: p.y, vx: (this.vrng() - 0.5) * 20, vy: -20, life: 0.5, r: 3, color: 'rgba(200,200,200,0.7)', grow: 1 });
       }
       const res = this.stepProjectile(p, dt);
       if (res === 'explode') {
@@ -471,7 +558,7 @@ export class Game {
         if (p.y > this.waterY) {
           sfx.splash();
           this.say('Plums!', 1);
-          for (let k = 0; k < 10; k++) this.particles.push({ x: p.x, y: this.waterY, vx: (this.rng() - 0.5) * 150, vy: -100 - this.rng() * 200, life: 0.6, r: 2 + this.rng() * 2, color: '#a8d8ff', grav: 1 });
+          if (!this.headless) for (let k = 0; k < 10; k++) this.particles.push({ x: p.x, y: this.waterY, vx: (this.vrng() - 0.5) * 150, vy: -100 - this.vrng() * 200, life: 0.6, r: 2 + this.vrng() * 2, color: '#a8d8ff', grav: 1 });
         }
       }
     }
@@ -485,7 +572,7 @@ export class Game {
     for (const s of this.snails) {
       if (!s.alive) continue;
       const cx = s.x, cy = s.y - 10;
-      const d = Math.hypot(cx - x, cy - y);
+      const d = dhypot(cx - x, cy - y);
       if (d > reach) continue;
       const k = 1 - d / reach;
       const amount = Math.round(dmg * clamp(k * 1.25, 0, 1));
@@ -497,19 +584,20 @@ export class Game {
       s.airborne = true;
       s.y -= 2;
     }
-    // particles
+    // particles (visual only)
+    if (this.headless) return;
     const n = Math.round(r * 0.9);
     for (let i = 0; i < n; i++) {
-      const a = this.rng() * Math.PI * 2, sp = this.rng() * r * 8;
+      const a = this.vrng() * Math.PI * 2, sp = this.vrng() * r * 8;
       this.particles.push({
-        x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 100, life: 0.5 + this.rng() * 0.7,
-        r: 2 + this.rng() * 4, color: this.rng() < 0.5 ? '#6e4324' : '#3a2210', grav: 1,
+        x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 100, life: 0.5 + this.vrng() * 0.7,
+        r: 2 + this.vrng() * 4, color: this.vrng() < 0.5 ? '#6e4324' : '#3a2210', grav: 1,
       });
     }
     for (let i = 0; i < 8; i++) {
-      const a = this.rng() * Math.PI * 2, sp = this.rng() * 60;
+      const a = this.vrng() * Math.PI * 2, sp = this.vrng() * 60;
       this.particles.push({
-        x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40, life: 0.6 + this.rng() * 0.5,
+        x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40, life: 0.6 + this.vrng() * 0.5,
         r: r * 0.25, color: 'rgba(255,190,80,0.8)', grow: 2, fade: true,
       });
     }
@@ -534,6 +622,7 @@ export class Game {
   }
 
   updateCamera(dt) {
+    if (!this.canvas) return;
     const cam = this.cam;
     const cw = this.canvas.clientWidth, ch = this.canvas.clientHeight;
     const minZoom = Math.max(cw / this.W, ch / this.H);
@@ -557,7 +646,7 @@ export class Game {
   simulateShot(weaponId, s, aim, power, facing) {
     const w = WEAPON_BY_ID[weaponId];
     const h = { x: s.x + facing * 14, y: s.y - 21 };
-    const d = { x: Math.cos(aim) * facing, y: -Math.sin(aim) };
+    const d = { x: dcos(aim) * facing, y: -dsin(aim) };
     const p = { type: weaponId, x: h.x + d.x * 18, y: h.y + d.y * 18, vx: d.x * w.speed * power, vy: d.y * w.speed * power, fuse: w.fuse ?? 0, age: 0, owner: s, rest: false };
     const dt = 1 / 60;
     for (let i = 0; i < 60 * 7; i++) {
@@ -596,8 +685,8 @@ export class Game {
     return pts;
   }
 
-  planShot(s, target) {
-    const facing = Math.sign(target.x - s.x) || s.facing;
+  planShot(s, target, forceFacing = 0) {
+    const facing = forceFacing || Math.sign(target.x - s.x) || s.facing;
     let best = null;
     for (const wid of ['bazooka', 'granat']) {
       const w = WEAPON_BY_ID[wid];
@@ -606,13 +695,13 @@ export class Game {
         for (let pw = 0.3; pw <= 1.001; pw += 0.1) {
           const hit = this.simulateShot(wid, s, aim, pw, facing);
           if (!hit) continue;
-          const dself = Math.hypot(hit.x - s.x, hit.y - (s.y - 10));
+          const dself = dhypot(hit.x - s.x, hit.y - (s.y - 10));
           if (dself < w.radius * 1.6) continue;
-          const dt = Math.hypot(hit.x - target.x, hit.y - (target.y - 10));
+          const dt = dhypot(hit.x - target.x, hit.y - (target.y - 10));
           // prefer hits that also don't splash friends
           let friendly = 0;
           for (const o of this.snails) if (o.alive && o.team === s.team && o !== s) {
-            const df = Math.hypot(hit.x - o.x, hit.y - (o.y - 10));
+            const df = dhypot(hit.x - o.x, hit.y - (o.y - 10));
             if (df < w.radius * 1.5) friendly += 40;
           }
           const score = dt + friendly + (wid === 'granat' ? 8 : 0);
@@ -631,33 +720,36 @@ export class Game {
     ai.t += dt;
     const enemies = this.snails.filter((o) => o.alive && o.team !== s.team);
     if (!enemies.length) return;
-    if (!ai.target) ai.target = enemies.reduce((a, b) => (Math.hypot(a.x - s.x, a.y - s.y) < Math.hypot(b.x - s.x, b.y - s.y) ? a : b));
+    if (!ai.target) ai.target = enemies.reduce((a, b) => (dhypot(a.x - s.x, a.y - s.y) < dhypot(b.x - s.x, b.y - s.y) ? a : b));
     const tgt = ai.target;
-    const dist = Math.hypot(tgt.x - s.x, tgt.y - s.y);
+    const dist = dhypot(tgt.x - s.x, tgt.y - s.y);
+    // Turning is a one-tick tap sideways (moves 1 px), so only turn where the
+    // ground continues; otherwise plan with the current facing.
+    const wantFacing = Math.sign(tgt.x - s.x) || s.facing;
+    const canTurn = wantFacing === s.facing || this.terrain.groundBelow(s.x + wantFacing, s.y - CLIMB, CLIMB * 2 + 1) > 0;
 
     if (ai.state === 'think') {
       if (ai.t < 0.7) return;
       ai.t = 0;
       // close-range options first
-      if (dist < 60 && Math.abs(tgt.y - s.y) < 30) {
-        ai.plan = { weapon: 'dynamit', facing: Math.sign(tgt.x - s.x) || s.facing, aim: 0, power: 1 };
+      if (canTurn && dist < 60 && Math.abs(tgt.y - s.y) < 30) {
+        ai.plan = { weapon: 'dynamit', facing: wantFacing, aim: 0, power: 1 };
         ai.state = 'aim'; return;
       }
-      if (dist < 200 && this.lineOfSight(s, tgt)) {
-        const facing = Math.sign(tgt.x - s.x) || s.facing;
-        const aim = Math.atan2(-(tgt.y - 12 - (s.y - 18)), Math.abs(tgt.x - s.x));
-        ai.plan = { weapon: 'salt', facing, aim: clamp(aim, -1.45, 1.45), power: 1 };
+      if (canTurn && dist < 200 && this.lineOfSight(s, tgt)) {
+        const aim = datan2(-(tgt.y - 12 - (s.y - 18)), Math.abs(tgt.x - s.x));
+        ai.plan = { weapon: 'salt', facing: wantFacing, aim: clamp(aim, -1.45, 1.45), power: 1 };
         ai.state = 'aim'; return;
       }
-      const plan = this.planShot(s, tgt);
+      const plan = this.planShot(s, tgt, canTurn ? 0 : s.facing);
       if (plan && (plan.dist < 34 || ai.tries >= 2 || this.timer < 12)) {
         ai.plan = plan; ai.state = 'aim'; return;
       }
       ai.bestPlan = plan;
       ai.tries++;
-      ai.state = 'walk'; ai.walkT = 1.2 + this.rng() * 1.5;
+      ai.state = 'walk'; ai.walkT = 1.2 + this.airng() * 1.5;
       ai.walkDir = Math.sign(tgt.x - s.x) || 1;
-      if (this.rng() < 0.3) ai.walkDir *= -1;
+      if (this.airng() < 0.3) ai.walkDir *= -1;
       return;
     }
     if (ai.state === 'walk') {
@@ -674,12 +766,24 @@ export class Game {
       return;
     }
     if (ai.state === 'aim') {
+      // Everything goes through inputs so the recording reproduces the turn.
       const plan = ai.plan;
-      s.facing = plan.facing;
-      this.weaponId = plan.weapon;
+      inp.weapon = plan.weapon;
+      if (s.facing !== plan.facing) { if (plan.facing > 0) inp.right = true; else inp.left = true; return; }
       const diff = plan.aim - s.aim;
-      if (Math.abs(diff) > 0.03) { if (diff > 0) inp.up = true; else inp.down = true; return; }
-      s.aim = plan.aim;
+      if (Math.abs(diff) > 0.015) { if (diff > 0) inp.up = true; else inp.down = true; return; }
+      // the aim lands within one step of the plan; re-pick the power for the actual angle
+      if (WEAPON_BY_ID[plan.weapon].speed && ai.target) {
+        let best = null;
+        for (let pw = 0.15; pw <= 1.001; pw += 0.05) {
+          const hit = this.simulateShot(plan.weapon, s, s.aim, pw, s.facing);
+          if (!hit) continue;
+          const d = dhypot(hit.x - ai.target.x, hit.y - (ai.target.y - 10));
+          if (dhypot(hit.x - s.x, hit.y - (s.y - 10)) < WEAPON_BY_ID[plan.weapon].radius * 1.6) continue;
+          if (!best || d < best.d) best = { d, pw };
+        }
+        if (best) plan.power = best.pw;
+      }
       ai.state = 'charge'; ai.t = 0;
       inp.fire = true;
       return;
@@ -699,7 +803,7 @@ export class Game {
 
   lineOfSight(a, b) {
     const x0 = a.x, y0 = a.y - 14, x1 = b.x, y1 = b.y - 14;
-    const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 3);
+    const n = Math.ceil(dhypot(x1 - x0, y1 - y0) / 3);
     for (let i = 1; i < n; i++) {
       const k = i / n;
       if (this.terrain.solid(x0 + (x1 - x0) * k, y0 + (y1 - y0) * k)) return false;
@@ -709,6 +813,7 @@ export class Game {
 
   // ---------- render ----------
   render() {
+    if (!this.ctx) return;
     const { ctx, canvas, cam } = this;
     const dpr = window.devicePixelRatio || 1;
     const cw = canvas.clientWidth, ch = canvas.clientHeight;
@@ -727,8 +832,8 @@ export class Game {
     ctx.fillStyle = 'rgba(255,240,180,0.9)';
     ctx.beginPath(); ctx.arc(cw * 0.82, ch * 0.16, 36, 0, Math.PI * 2); ctx.fill();
 
-    const shx = this.shake ? (this.rng() - 0.5) * this.shake : 0;
-    const shy = this.shake ? (this.rng() - 0.5) * this.shake : 0;
+    const shx = this.shake ? (this.vrng() - 0.5) * this.shake : 0;
+    const shy = this.shake ? (this.vrng() - 0.5) * this.shake : 0;
     const ox = cw / 2 - cam.x * cam.zoom + shx, oy = ch / 2 - cam.y * cam.zoom + shy;
 
     // parallax hills
@@ -832,7 +937,7 @@ export class Game {
       if (p.type === 'bazooka') {
         ctx.rotate(p.rot);
         ctx.fillStyle = '#ff9a3c';
-        ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(-16 - this.rng() * 6, -3); ctx.lineTo(-16 - this.rng() * 6, 3); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(-16 - this.vrng() * 6, -3); ctx.lineTo(-16 - this.vrng() * 6, 3); ctx.closePath(); ctx.fill();
         ctx.fillStyle = '#444';
         roundRect(ctx, -9, -3.5, 16, 7, 3); ctx.fill();
         ctx.fillStyle = '#c33';
@@ -847,7 +952,7 @@ export class Game {
         ctx.fillStyle = '#c62828';
         roundRect(ctx, -4, -14, 8, 14, 2); ctx.fill();
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(-4, -9, 8, 3);
-        const flick = this.rng();
+        const flick = this.vrng();
         ctx.fillStyle = flick < 0.5 ? '#ffd54f' : '#ff7043';
         ctx.beginPath(); ctx.arc(0, -16, 2.5, 0, Math.PI * 2); ctx.fill();
         this.fuseLabel(ctx, p, -22);

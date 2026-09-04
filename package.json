@@ -1,0 +1,12 @@
+{
+  "name": "snackmageddon",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Turbaserat artilleri-spel med afrikanska jättesnäckor. PWA utan byggsteg.",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node test/determinism.test.mjs"
+  },
+  "license": "UNLICENSED"
+}

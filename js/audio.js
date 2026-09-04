@@ -2,6 +2,7 @@
 let ac = null;
 let muted = false;
 function ctx() {
+  if (typeof window === 'undefined') return null;
   if (!ac) {
     try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch { return null; }
   }

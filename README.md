@@ -38,6 +38,23 @@ sätts i `js/main.js` (`settings.style`).
 - Tangentbord: ← → / A D gå, ↑ ↓ / W S sikta, mellanslag ladda+skjut, Enter hoppa,
   1–4 / Tab vapen, Esc meny. Touch: knappar på skärmen, dra för att panorera, nyp för zoom.
 
+## Deterministisk simulering
+
+Simuleringen går i fasta steg om 1/60 s, all slump är seedad och all matte i
+simuleringen är motoroberoende (`js/dmath.js`). Kollisionsmasken beräknas
+analytiskt, aldrig från canvas-pixlar. Varje indata (tangent, touch eller AI)
+går genom `game.tick()` och spelas in som `(tick, input)`-par i
+`game.recording`. En inspelning kan spelas upp bit för bit med
+`Game.fromRecording(canvas, recording)`, även utan webbläsare:
+
+```bash
+npm test     # node test/determinism.test.mjs
+```
+
+`game.stateHash()` ger en 32-bitars hash av hela speltillståndet och används
+för att upptäcka om två körningar glider isär. Det här är grunden för replays,
+asynkront multiplayer och serversidig verifiering.
+
 ## Struktur
 
 ```
@@ -50,6 +67,9 @@ js/game.js            spellogik: turordning, fysik, vapen, AI, rendering
 js/terrain.js         förstörbar terräng (canvas + kollisionsmask)
 js/snails.js          snäck-sprites (alla stilar)
 js/audio.js           syntetiserade ljudeffekter
+js/rng.js             seedad slump, shuffle, tillståndshash
+js/dmath.js           motoroberoende sin/cos/atan2
+test/                 determinismtester (Node, körs i CI)
 design/snails.html    designförslag
 icons/                app-ikoner
 ```

@@ -1,4 +1,4 @@
-import { Game, WEAPONS } from './game.js';
+import { Game, WEAPONS, TICK } from './game.js';
 import { SNAIL_STYLES, TEAM_COLORS } from './snails.js';
 import { unlockAudio } from './audio.js';
 
@@ -87,6 +87,7 @@ function startGame() {
   gameover.hidden = true;
   hud.hidden = false;
   lastTs = performance.now();
+  acc = 0;
   tryFullscreen();
 }
 
@@ -129,6 +130,7 @@ addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
   const k = keyMap[e.code];
   if (k) { if (!game.ai || k === 'fire') { /* humans only */ } if (!game.ai) game.input[k] = true; e.preventDefault(); }
+  if (game.ai || game.replay) return;
   if (/^Digit[1-4]$/.test(e.code)) game.selectWeapon(WEAPONS[+e.code[5] - 1].id);
   if (e.code === 'Tab') {
     e.preventDefault();
@@ -233,12 +235,17 @@ function updateHud(now) {
 }
 
 // ---------- loop ----------
+// Fixed-step simulation: the game only ever advances in whole ticks of TICK
+// seconds, however fast the display runs. Rendering happens once per frame.
+let acc = 0;
 function frame(ts) {
   requestAnimationFrame(frame);
   if (!game) return;
-  const dt = (ts - lastTs) / 1000;
+  acc += Math.min(0.25, (ts - lastTs) / 1000);
   lastTs = ts;
-  game.update(dt);
+  let n = 0;
+  while (acc >= TICK && n < 6) { game.tick(); acc -= TICK; n++; }
+  if (n === 6) acc = 0; // tab was hidden or the device is too slow: drop time instead of spiralling
   game.render();
   updateHud(ts);
 }
