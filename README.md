@@ -48,8 +48,15 @@ går genom `game.tick()` och spelas in som `(tick, input)`-par i
 `Game.fromRecording(canvas, recording)`, även utan webbläsare:
 
 ```bash
-npm test     # node test/determinism.test.mjs
+npm test               # determinismtester i Node, inga beroenden
+npm install            # hämtar Playwright för webbläsartesterna
+npm run test:browser   # spelar genom riktiga UI:t i Chromium, skärmdumpar i test-results/
 ```
+
+Webbläsartestet driver simuleringen tick för tick (`window.__manualTick`) och
+jämför webbläsarens `stateHash()` med en headless Node-körning på samma seed
+(`?seed=1234` i URL:en ger en reproducerbar match). Båda testsviterna körs i
+CI vid varje push.
 
 `game.stateHash()` ger en 32-bitars hash av hela speltillståndet och används
 för att upptäcka om två körningar glider isär. Det här är grunden för replays,
@@ -69,7 +76,7 @@ js/snails.js          snäck-sprites (alla stilar)
 js/audio.js           syntetiserade ljudeffekter
 js/rng.js             seedad slump, shuffle, tillståndshash
 js/dmath.js           motoroberoende sin/cos/atan2
-test/                 determinismtester (Node, körs i CI)
+test/                 determinism- och webbläsartester (körs i CI)
 design/snails.html    designförslag
 icons/                app-ikoner
 ```

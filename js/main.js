@@ -72,6 +72,9 @@ function readConfig() {
 function startGame() {
   unlockAudio();
   const cfg = readConfig();
+  // ?seed=1234 gives a reproducible map and match (used by tests and for sharing)
+  const seedParam = new URLSearchParams(location.search).get('seed');
+  if (seedParam !== null && seedParam !== '') cfg.seed = Number(seedParam) | 0;
   game = new Game(canvas, cfg, {
     onGameOver: (winner) => {
       setTimeout(() => {
@@ -244,8 +247,11 @@ function frame(ts) {
   acc += Math.min(0.25, (ts - lastTs) / 1000);
   lastTs = ts;
   let n = 0;
-  while (acc >= TICK && n < 6) { game.tick(); acc -= TICK; n++; }
-  if (n === 6) acc = 0; // tab was hidden or the device is too slow: drop time instead of spiralling
+  // window.__manualTick lets tests drive game.tick() themselves
+  if (!window.__manualTick) {
+    while (acc >= TICK && n < 6) { game.tick(); acc -= TICK; n++; }
+    if (n === 6) acc = 0; // tab was hidden or the device is too slow: drop time instead of spiralling
+  }
   game.render();
   updateHud(ts);
 }

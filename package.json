@@ -6,7 +6,12 @@
   "type": "module",
   "scripts": {
     "start": "python3 -m http.server 8080",
-    "test": "node test/determinism.test.mjs"
+    "test": "node test/determinism.test.mjs",
+    "test:browser": "node test/browser.test.mjs",
+    "test:all": "npm test && npm run test:browser"
   },
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
 }
