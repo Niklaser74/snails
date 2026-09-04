@@ -106,8 +106,7 @@ function applyLanguage() {
     row.querySelector('input').setAttribute('aria-label', t('menu.teamName'));
     const sel = row.querySelector('select');
     sel.setAttribute('aria-label', t('menu.player'));
-    sel.options[0].textContent = t('menu.human');
-    sel.options[1].textContent = t('menu.ai');
+    PLAYER_KINDS.forEach((k, j) => { sel.options[j].textContent = t('menu.player.' + k); });
   });
   for (const b of $('weapons').children) b.title = t('weapon.' + b.dataset.id);
   if ($('offline-hint').dataset.ready) $('offline-hint').textContent = t('menu.offline');
@@ -152,6 +151,8 @@ function readRules() {
 renderStyleOptions();
 styleSel.value = settings.style;
 
+const PLAYER_KINDS = ['human', 'easy', 'normal', 'hard'];
+const playerOptions = () => PLAYER_KINDS.map((k) => `<option value="${k}">${t('menu.player.' + k)}</option>`).join('');
 function renderTeamRows() {
   const n = +$('opt-teams').value;
   const box = $('team-rows');
@@ -164,9 +165,9 @@ function renderTeamRows() {
     row.innerHTML = `
       <div class="swatch" style="background:${TEAM_COLORS[i].hex}"></div>
       <input type="text" maxlength="16" aria-label="${t('menu.teamName')}">
-      <select aria-label="${t('menu.player')}"><option value="human">${t('menu.human')}</option><option value="ai">${t('menu.ai')}</option></select>`;
+      <select aria-label="${t('menu.player')}">${playerOptions()}</select>`;
     row.querySelector('input').value = name;
-    row.querySelector('select').value = saved.ai ? 'ai' : i === 0 ? 'human' : 'ai';
+    row.querySelector('select').value = saved.ai === true ? 'normal' : saved.ai || (i === 0 ? 'human' : 'normal');
     box.appendChild(row);
   }
 }
@@ -178,7 +179,7 @@ function readConfig() {
   const rows = [...document.querySelectorAll('.team-row')].map((r, i) => ({
     name: r.querySelector('input').value.trim() || defaultTeamName(i),
     color: TEAM_COLORS[i].hex,
-    ai: r.querySelector('select').value === 'ai',
+    ai: r.querySelector('select').value === 'human' ? false : r.querySelector('select').value,
   }));
   settings.teams = +$('opt-teams').value;
   settings.per = +$('opt-per').value;
@@ -686,7 +687,7 @@ addEventListener('keydown', (e) => {
   if (k) { if (!game.ai) game.input[k] = true; e.preventDefault(); }
   if (e.code === 'Escape') { toMenu(); return; }
   if (game.ai || game.replay) return;
-  if (/^Digit[1-6]$/.test(e.code)) game.selectWeapon(WEAPONS[+e.code[5] - 1].id);
+  if (/^Digit[1-8]$/.test(e.code)) game.selectWeapon(WEAPONS[+e.code[5] - 1].id);
   if (e.code === 'Tab') {
     e.preventDefault();
     const ammo = game.active ? game.teams[game.active.team].ammo : {};
@@ -766,7 +767,7 @@ function updateHud(now) {
   hudLast = now;
   const st = game.hudState();
   const team = $('hud-team');
-  if (st.team) { team.textContent = `${st.team.name} · ${st.snail?.name ?? ''}${st.ai ? ' ' + t('hud.ai') : ''}`; team.style.background = st.team.color; }
+  if (st.team) { team.textContent = `${st.team.name} · ${st.snail?.name ?? ''}${st.ai ? ' ' + t('hud.ai.' + st.ai) : ''}`; team.style.background = st.team.color; }
   const timer = $('hud-timer');
   timer.textContent = st.phase === 'aim' || st.phase === 'retreat' ? Math.ceil(st.timer) : '·';
   timer.classList.toggle('low', st.phase === 'aim' && st.timer < 10);

@@ -53,7 +53,7 @@ sätts i `js/main.js` (`settings.style`).
   Supabase. Inga namn, inga IP-adresser, av på localhost och vid Do Not Track.
   Se `supabase/README.md`.
 - Tangentbord: ← → / A D gå, ↑ ↓ / W S sikta, mellanslag ladda+skjut, Enter hoppa,
-  1–6 / Tab vapen, Esc meny. Touch: knappar på skärmen, dra för att panorera, nyp för zoom.
+  1–8 / Tab vapen, Esc meny. Touch: knappar på skärmen, dra för att panorera, nyp för zoom.
 
 ## Snigelpost (asynkront multiplayer)
 

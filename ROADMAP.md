@@ -17,9 +17,11 @@ att göra det hållbart, roligare och till slut lönsamt.
 ### Fas 1 – Känsla och kärnloop
 | Klart | Kvar |
 |---|---|
-| Kamerapunch vid explosioner | Slow motion vid dödsskott, skal som spricker, slemspår |
-| Slemklot, Saltregn, ammunition, lådor | Skalstöt (dash), Snigelhopp (teleport) |
-| Guide i första matchen | AI-svårighetsgrader |
+| Kamerapunch vid explosioner, slow motion vid dödsskott | Skal som spricker, slemspår |
+| Slemklot, Saltregn, ammunition, lådor | |
+| Skalstöt (knuff) och Snigelhopp (teleport), åtta vapen totalt | |
+| Guide i första matchen | |
+| AI-nivåer: lätt, normal, svår | |
 | Tester i CI (Node + Playwright) | Terrängteman (trädgårdsland, strand, regnskog) |
 | Förhandsbana vid sikte | Inställningar: dragtid, plötslig död, ljud av/på, gamepad |
 | Lagrat ljud: mastervolym, ljud av/på i HUD:en, lager av brus och toner | Inspelade ljud och musik |
@@ -85,7 +87,9 @@ Stripe när e-postkoppling finns, sedan säsongspass och belönad reklam.
    ~~Serier, bäst av 1/3/5~~ – klart 2026-09-04.
 2. ~~**Ljud och inställningar**: ljud av/på i HUD:en, dragtid, plötslig död,
    bättre ljud, slow motion vid dödsskott.~~ – klart 2026-09-04.
-3. **De två sista vapnen och AI-nivåer** (lätt, normal, svår).
+3. ~~**De två sista vapnen och AI-nivåer** (lätt, normal, svår).~~ – klart 2026-09-04.
+   Regelversionen höjdes till 3 (nya vapen ändrar hashen); databasen var tom, så
+   inga matcher gick förlorade. Punkt 6 nedan är fortfarande öppen.
 4. **E-postkoppling** av kontot, grunden för fas 3 och för att inte tappa
    spelare vid byte av telefon.
 5. **snails.se och Poki-inskick** när DNS:en är på plats.

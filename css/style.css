@@ -70,6 +70,11 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #5fb0ea; fon
   .weapons { top: calc(112px + var(--safe-t)); }
   .weapons button { width: 44px; height: 38px; font-size: 17px; }
 }
+/* short screens (phone landscape): eight weapons in two columns */
+@media (max-height: 520px) {
+  .weapons { flex-direction: row; flex-wrap: wrap; width: 96px; justify-content: flex-end; gap: 4px; }
+  .weapons button { width: 46px; height: 36px; font-size: 16px; }
+}
 
 /* ---------- Tutorial ---------- */
 .tutorial { position: absolute; left: 50%; bottom: calc(110px + var(--safe-b)); transform: translateX(-50%); width: min(460px, 60vw); background: rgba(255,250,240,.95); color: var(--ink); border-radius: 14px; padding: 10px 14px 12px; box-shadow: 0 8px 30px rgba(0,0,0,.3); }

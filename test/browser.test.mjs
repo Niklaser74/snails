@@ -76,12 +76,15 @@ await test('menu and design page load without errors', async () => {
 
 await test('keyboard: walk, aim, pick grenade, charge and fire', async () => {
   const { page, errors } = await open('/?seed=4242');
-  await page.selectOption('.team-row:nth-child(2) select', 'ai');
+  await page.selectOption('.team-row:nth-child(2) select', 'normal');
   await page.click('#btn-start');
   await page.waitForFunction(() => window.__game);
   const before = await page.evaluate(() => ({ x: __game.active.x, aim: __game.active.aim, w: __game.weaponId }));
   await page.keyboard.down('ArrowRight'); await ticks(page, 60); await page.keyboard.up('ArrowRight');
   await page.keyboard.down('ArrowUp'); await ticks(page, 20); await page.keyboard.up('ArrowUp');
+  assert.equal(await page.locator('#weapons button').count(), 8, 'eight weapon buttons');
+  await page.keyboard.press('Digit7'); await ticks(page, 2);
+  assert.equal(await page.evaluate(() => __game.weaponId), 'skalstot');
   await page.keyboard.press('Digit2'); await ticks(page, 2);
   await page.keyboard.down('Space'); await ticks(page, 30);
   await page.screenshot({ path: path.join(outDir, 'charging.png') });
@@ -124,7 +127,7 @@ await test('AI vs AI in the browser matches the headless Node simulation', async
   const { page, errors } = await open(`/?seed=${seed}`);
   await page.selectOption('#opt-teams', '2');
   await page.selectOption('#opt-per', '3');
-  for (const sel of await page.$$('.team-row select')) await sel.selectOption('ai');
+  for (const sel of await page.$$('.team-row select')) await sel.selectOption('normal');
   const rows = await page.$$eval('.team-row', (rs) => rs.map((r) => ({ name: r.querySelector('input').value, color: r.querySelector('.swatch').style.backgroundColor })));
   await page.click('#btn-start');
   await page.waitForFunction(() => window.__game);
@@ -178,6 +181,7 @@ await test('language switch translates the menu and default team names', async (
   // headless Chromium is en-US, so the page starts in English
   assert.equal(await page.locator('#btn-start').textContent(), 'Start match');
   assert.equal(await page.inputValue('.team-row:nth-child(1) input'), 'Slime Gang');
+  assert.deepEqual(await page.$$eval('.team-row:nth-child(2) select option', (os) => os.map((o) => o.textContent)), ['Human', 'Computer – easy', 'Computer – normal', 'Computer – hard']);
   assert.equal(await page.title(), 'Snailmageddon');
   assert.equal(await page.locator('h1').textContent(), 'Snailmageddon');
   await page.selectOption('#opt-lang', 'sv');
@@ -209,8 +213,8 @@ await test('settings: turn time, sudden death, volume and the mute button are re
   await page.selectOption('#opt-sudden', '0');
   await page.fill('#opt-volume', '40');
   await page.dispatchEvent('#opt-volume', 'input');
-  await page.selectOption('.team-row:nth-child(1) select', 'ai');
-  await page.selectOption('.team-row:nth-child(2) select', 'ai');
+  await page.selectOption('.team-row:nth-child(1) select', 'normal');
+  await page.selectOption('.team-row:nth-child(2) select', 'normal');
   await page.click('#btn-start');
   await page.waitForFunction(() => window.__game);
   await page.evaluate(() => { window.__manualTick = true; });
@@ -253,7 +257,7 @@ await test('settings: turn time, sudden death, volume and the mute button are re
 
 await test('first-match guide advances as the player walks, aims and fires', async () => {
   const { page, errors } = await open('/?seed=4242');
-  await page.selectOption('.team-row:nth-child(2) select', 'ai');
+  await page.selectOption('.team-row:nth-child(2) select', 'normal');
   await page.click('#btn-start');
   await page.waitForFunction(() => window.__game);
   // the guide is evaluated by the HUD updater (throttled to ~80 ms), so give it a moment after each action

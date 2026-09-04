@@ -86,6 +86,10 @@ export const sfx = {
   splat() { noise(0.14, 0.35, 800, 3); tone(260, 80, 0.2, 'sine', 0.22); },
   // a shell cracking: crunchy noise plus a falling tone
   cracked() { noise(0.08, 0.5, 2600, 2, 'highpass'); noise(0.35, 0.4, 900, 2, 'bandpass', 1.5, 0.03); tone(400, 60, 0.5, 'sawtooth', 0.12, 0.05); thump(0.8, 0.05); },
+  // shell shove: a dull thud plus a whip of air
+  shove() { thump(0.6); noise(0.12, 0.45, 900, 2.5, 'bandpass', 1.2); noise(0.2, 0.25, 3000, 2, 'highpass', 1, 0.02); },
+  // snail hop: a rising sparkle and a soft pop where it lands
+  teleport() { tone(300, 1400, 0.35, 'sine', 0.14); tone(600, 2200, 0.3, 'triangle', 0.08, 0.05); noise(0.25, 0.2, 4000, 2, 'highpass', 1, 0.25); tone(500, 180, 0.15, 'sine', 0.15, 0.3); },
   crate() { tone(660, 990, 0.12, 'triangle', 0.15); tone(990, 1320, 0.15, 'triangle', 0.15, 0.09); },
   // the water is rising: two low warning notes
   sudden() { tone(220, 220, 0.25, 'square', 0.1); tone(196, 196, 0.35, 'square', 0.1, 0.3); noise(0.8, 0.15, 500, 1.5, 'lowpass', 1, 0.1); },

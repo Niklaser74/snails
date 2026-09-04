@@ -6,7 +6,7 @@ import { dsin, dcos, dhypot, datan2 } from './dmath.js';
 
 // Bump when physics or rules change so old recordings are not replayed with
 // new rules.
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3; // 3: shell shove, snail hop, AI levels
 // Fixed simulation step. The sim only ever advances by exactly this much.
 export const TICK = 1 / 60;
 
@@ -19,8 +19,22 @@ export const WEAPONS = [
   { id: 'dynamit', name: 'Dynamit', icon: '🧨', fuse: 4, radius: 52, dmg: 75, charge: false, ammo: 2 },
   { id: 'slem', name: 'Slemklot', icon: '🟢', radius: 30, dmg: 40, fuse: 2, charge: true, speed: 700, sticky: true, ammo: 3 },
   { id: 'saltregn', name: 'Saltregn', icon: '🌧️', radius: 13, dmg: 12, drops: 5, wind: true, charge: false, contact: true, marker: true, ammo: 1 },
+  // melee: shoves every snail right in front of you, hard. No terrain damage, unlimited.
+  { id: 'skalstot', name: 'Skalstöt', icon: '🐚', range: 34, dmg: 22, push: 380, lift: 230, charge: false, melee: true, ammo: Infinity },
+  // teleport: aimed with the ground marker, the snail hops there and the turn ends
+  { id: 'snigelhopp', name: 'Snigelhopp', icon: '✨', charge: false, marker: true, teleport: true, ammo: 1 },
 ];
-export const CRATE_WEAPONS = ['dynamit', 'slem', 'saltregn'];
+export const CRATE_WEAPONS = ['dynamit', 'slem', 'saltregn', 'snigelhopp'];
+
+// AI difficulty. Everything the AI does goes through the input snapshot and
+// its own rng, so a level only changes which inputs get recorded.
+export const AI_LEVELS = {
+  easy: { think: 1.2, aimStep: 10, powerStep: 0.15, error: 0.14, fireDist: 70, specials: false, repick: false, weakest: false },
+  normal: { think: 0.7, aimStep: 5, powerStep: 0.1, error: 0.03, fireDist: 34, specials: true, repick: true, weakest: false },
+  hard: { think: 0.5, aimStep: 3, powerStep: 0.05, error: 0, fireDist: 26, specials: true, repick: true, weakest: true, pickBest: true, smart: true, fireValue: 30 },
+};
+// team.ai may be false, true (old saves: normal) or a level name
+export function aiLevel(v) { return v === true ? 'normal' : AI_LEVELS[v] ? v : false; }
 export const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map((w) => [w.id, w]));
 
 export const SNAIL_NAMES = [
@@ -108,7 +122,7 @@ export class Game {
     this.recording = {
       rulesVersion: RULES_VERSION,
       seed: this.seed,
-      teams: config.teams.map((t) => ({ name: t.name, color: t.color, ai: !!t.ai })),
+      teams: config.teams.map((t) => ({ name: t.name, color: t.color, ai: aiLevel(t.ai) })),
       snailsPerTeam: config.snailsPerTeam || 3,
       turnTime: this.rules.turnTime,
       suddenDeath: this.rules.suddenDeath,
@@ -214,7 +228,7 @@ export class Game {
     const names = shuffle([...SNAIL_NAMES], this.rng);
     let ni = 0;
     this.teams = this.config.teams.map((t, ti) => ({
-      index: ti, name: t.name, color: t.color, ai: !!t.ai, nextSnail: 0,
+      index: ti, name: t.name, color: t.color, ai: aiLevel(t.ai), nextSnail: 0,
       snails: [], ammo: Object.fromEntries(WEAPONS.map((w) => [w.id, w.ammo])),
     }));
     this.snails = [];
@@ -271,7 +285,7 @@ export class Game {
     this.charging = false;
     this.hasFired = false;
     this.weaponId = 'bazooka';
-    this.ai = team.ai && !this.replay ? { state: 'think', t: 0, plan: null, walkT: 0, tries: 0 } : null;
+    this.ai = team.ai && !this.replay ? { state: 'think', t: 0, plan: null, walkT: 0, tries: 0, level: AI_LEVELS[team.ai] } : null;
     Object.assign(this.input, emptyInput());
     this.prevFire = false;
     // Snigelpost: the other player's turn is played on their device
@@ -481,7 +495,9 @@ export class Game {
           if (released || this.power >= 1) { this.fire(w, Math.max(0.15, this.power)); }
         }
       } else if (pressed) {
-        this.fire(w, 1);
+        // the hop needs solid, dry ground under the marker; otherwise nothing happens
+        if (w.teleport && !this.teleportSpot(this.markerX)) sfx.tickLow();
+        else this.fire(w, 1);
       }
     }
   }
@@ -606,8 +622,59 @@ export class Game {
       this.cam.target = s;
     } else if (w.id === 'saltregn') {
       this.fireSaltRain(this.markerX, w);
+    } else if (w.melee) {
+      this.shove(s, w);
+    } else if (w.teleport) {
+      this.teleport(s, this.markerX);
     }
     this.hooks.onFire?.(this);
+  }
+
+  // Shell shove: every snail right in front of the active one takes a hit and flies.
+  shove(s, w) {
+    sfx.shove();
+    this.cam.target = s;
+    for (const o of this.snails) {
+      if (!o.alive || o === s) continue;
+      const dx = (o.x - s.x) * s.facing;
+      if (dx < -6 || dx > w.range || Math.abs(o.y - s.y) > 34) continue;
+      this.damage(o, w.dmg, 'blast');
+      o.vx += s.facing * w.push;
+      o.vy -= w.lift;
+      o.airborne = true;
+      o.y -= 2;
+      if (!this.headless) this.popups.push({ x: o.x, y: o.y - 56, text: '💥', life: 0.8, color: '#fff' });
+    }
+    if (!this.headless) this.particles.push({ x: s.x + s.facing * 20, y: s.y - 14, vx: s.facing * 60, vy: 0, life: 0.22, r: 12, color: 'rgba(255,255,255,0.7)', grow: 2, fade: true });
+  }
+
+  // Where a snail lands if it hops to x: the top surface there, if it is dry and has headroom.
+  teleportSpot(x) {
+    x = Math.round(clamp(x, 20, this.W - 20));
+    const gy = this.terrain.groundBelow(x, 0);
+    if (gy <= 0 || gy > this.waterY - 4) return null;
+    for (let y = gy - 4; y > gy - HEAD_H; y -= 4) if (this.terrain.solid(x, y)) return null;
+    if (this.snailAt(x, gy - 10, this.active)) return null;
+    return { x, y: gy };
+  }
+
+  teleport(s, x) {
+    const spot = this.teleportSpot(x);
+    if (spot) {
+      if (!this.headless) this.sparkle(s.x, s.y - 14);
+      s.x = spot.x; s.y = spot.y; s.vx = 0; s.vy = 0; s.airborne = false; s.walkAcc = 0;
+      if (!this.headless) this.sparkle(s.x, s.y - 14);
+      sfx.teleport();
+    }
+    this.cam.target = s;
+    this.timer = 1; // the hop is the turn
+  }
+
+  sparkle(x, y) {
+    for (let i = 0; i < 14; i++) {
+      const a = this.vrng() * Math.PI * 2, sp = 30 + this.vrng() * 90;
+      this.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40, life: 0.4 + this.vrng() * 0.4, r: 2 + this.vrng() * 2, color: this.vrng() < 0.5 ? '#c8ff6a' : '#ffffff', fade: true });
+    }
   }
 
   // Salt rain: a handful of salt crystals fall from the sky around the marker.
@@ -896,16 +963,16 @@ export class Game {
     return pts;
   }
 
-  planShot(s, target, forceFacing = 0) {
+  planShot(s, target, forceFacing = 0, level = AI_LEVELS.normal) {
     const facing = forceFacing || Math.sign(target.x - s.x) || s.facing;
     const team = this.teams[s.team];
     let best = null;
     for (const wid of ['bazooka', 'granat', 'slem']) {
       const w = WEAPON_BY_ID[wid];
       if (!(team.ammo[wid] > 0)) continue;
-      for (let ai = -60; ai <= 80; ai += 5) {
+      for (let ai = -60; ai <= 80; ai += level.aimStep) {
         const aim = (ai * Math.PI) / 180;
-        for (let pw = 0.3; pw <= 1.001; pw += 0.1) {
+        for (let pw = 0.3; pw <= 1.001; pw += level.powerStep) {
           const hit = this.simulateShot(wid, s, aim, pw, facing);
           if (!hit) continue;
           const dself = dhypot(hit.x - s.x, hit.y - (s.y - 10));
@@ -917,12 +984,34 @@ export class Game {
             const df = dhypot(hit.x - o.x, hit.y - (o.y - 10));
             if (df < w.radius * 1.5) friendly += 40;
           }
-          const score = dt + friendly + (wid === 'granat' ? 8 : wid === 'slem' ? 4 : 0);
-          if (!best || score < best.score) best = { weapon: wid, aim, power: pw, facing, score, dist: dt };
+          let score = dt + friendly + (wid === 'granat' ? 8 : wid === 'slem' ? 4 : 0);
+          let value = 0;
+          if (level.smart) {
+            // hard: judge a shot by the damage it would do to everyone, kills and friends included
+            value = this.blastValue(hit.x, hit.y, w, s.team);
+            score = -value + (wid === 'granat' ? 3 : wid === 'slem' ? 2 : 0);
+          }
+          if (!best || score < best.score) best = { weapon: wid, aim, power: pw, facing, score, dist: dt, value };
         }
       }
     }
     return best;
+  }
+
+  // Expected damage of a blast at (x, y): enemies count, a kill counts extra,
+  // friends count against. Mirrors explosion()'s falloff.
+  blastValue(x, y, w, myTeam) {
+    let v = 0;
+    const reach = w.radius * 1.5;
+    for (const o of this.snails) {
+      if (!o.alive) continue;
+      const d = dhypot(o.x - x, o.y - 10 - y);
+      if (d > reach) continue;
+      const dmg = Math.round(w.dmg * clamp((1 - d / reach) * 1.25, 0, 1));
+      if (o.team === myTeam) v -= dmg * 1.5;
+      else v += dmg + (dmg >= o.hp ? 45 : 0) + (o.y > this.waterY - 60 ? 10 : 0);
+    }
+    return v;
   }
 
   updateAI(dt) {
@@ -933,7 +1022,13 @@ export class Game {
     ai.t += dt;
     const enemies = this.snails.filter((o) => o.alive && o.team !== s.team);
     if (!enemies.length) return;
-    if (!ai.target) ai.target = enemies.reduce((a, b) => (dhypot(a.x - s.x, a.y - s.y) < dhypot(b.x - s.x, b.y - s.y) ? a : b));
+    const lvl = ai.level || AI_LEVELS.normal;
+    // nearest enemy, or (hard) the one that is easiest to finish off
+    if (!ai.target) ai.target = enemies.reduce((a, b) => {
+      const da = dhypot(a.x - s.x, a.y - s.y), db = dhypot(b.x - s.x, b.y - s.y);
+      if (lvl.weakest) return a.hp + da * 0.15 <= b.hp + db * 0.15 ? a : b;
+      return da < db ? a : b;
+    });
     const tgt = ai.target;
     const dist = dhypot(tgt.x - s.x, tgt.y - s.y);
     // Turning is a one-tick tap sideways (moves 1 px), so only turn where the
@@ -942,15 +1037,19 @@ export class Game {
     const canTurn = wantFacing === s.facing || this.terrain.groundBelow(s.x + wantFacing, s.y - CLIMB, CLIMB * 2 + 1) > 0;
 
     if (ai.state === 'think') {
-      if (ai.t < 0.7) return;
+      if (ai.t < lvl.think) return;
       ai.t = 0;
       // close-range options first
       const team = this.teams[s.team];
-      if (canTurn && dist < 60 && Math.abs(tgt.y - s.y) < 30 && team.ammo.dynamit > 0) {
+      if (canTurn && dist < WEAPON_BY_ID.skalstot.range + 4 && Math.abs(tgt.y - s.y) < 30 && lvl.specials) {
+        ai.plan = { weapon: 'skalstot', facing: wantFacing, aim: s.aim, power: 1 };
+        ai.state = 'aim'; return;
+      }
+      if (canTurn && dist < 60 && Math.abs(tgt.y - s.y) < 30 && team.ammo.dynamit > 0 && lvl.specials) {
         ai.plan = { weapon: 'dynamit', facing: wantFacing, aim: 0, power: 1 };
         ai.state = 'aim'; return;
       }
-      if (team.ammo.saltregn > 0 && this.openToSky(tgt) && !this.snails.some((o) => o.alive && o.team === s.team && Math.abs(o.x - tgt.x) < 80 && Math.abs(o.y - tgt.y) < 60)) {
+      if (lvl.specials && team.ammo.saltregn > 0 && this.openToSky(tgt) && !this.snails.some((o) => o.alive && o.team === s.team && Math.abs(o.x - tgt.x) < 80 && Math.abs(o.y - tgt.y) < 60)) {
         ai.plan = { weapon: 'saltregn', markerX: tgt.x, facing: s.facing, aim: s.aim, power: 1 };
         ai.state = 'aim'; return;
       }
@@ -959,9 +1058,29 @@ export class Game {
         ai.plan = { weapon: 'salt', facing: wantFacing, aim: clamp(aim, -1.45, 1.45), power: 1 };
         ai.state = 'aim'; return;
       }
-      const plan = this.planShot(s, tgt, canTurn ? 0 : s.facing);
-      if (plan && (plan.dist < 34 || ai.tries >= 2 || this.timer < 12)) {
+      let plan = this.planShot(s, tgt, canTurn ? 0 : s.facing, lvl);
+      // hard: shoot whichever enemy the best shot reaches, not just the nearest
+      if (lvl.pickBest) {
+        for (const e of enemies) {
+          if (e === tgt) continue;
+          const p2 = this.planShot(s, e, canTurn ? 0 : s.facing, lvl);
+          if (p2 && (!plan || p2.score < plan.score)) { plan = p2; ai.target = e; }
+        }
+      }
+      const good = plan && (lvl.smart ? plan.value >= lvl.fireValue : plan.dist < lvl.fireDist);
+      if (plan && (good || ai.tries >= 2 || this.timer < 12)) {
+        // weaker levels wobble a little around the plan
+        if (lvl.error > 0) {
+          plan.aim = clamp(plan.aim + (this.airng() * 2 - 1) * lvl.error, -1.45, 1.45);
+          plan.power = clamp(plan.power * (1 + (this.airng() * 2 - 1) * lvl.error), 0.15, 1);
+          plan.noisy = true;
+        }
         ai.plan = plan; ai.state = 'aim'; return;
+      }
+      // no good shot from here: a hop to a better spot beats walking (hard/normal, once per match per crate)
+      if (lvl.specials && ai.tries >= 1 && team.ammo.snigelhopp > 0) {
+        const spot = this.hopSpotNear(s, tgt);
+        if (spot) { ai.plan = { weapon: 'snigelhopp', markerX: spot.x, facing: s.facing, aim: s.aim, power: 1 }; ai.state = 'aim'; return; }
       }
       ai.bestPlan = plan;
       ai.tries++;
@@ -999,7 +1118,7 @@ export class Game {
       const diff = plan.aim - s.aim;
       if (Math.abs(diff) > 0.015) { if (diff > 0) inp.up = true; else inp.down = true; return; }
       // the aim lands within one step of the plan; re-pick the power for the actual angle
-      if (WEAPON_BY_ID[plan.weapon].speed && ai.target) {
+      if (WEAPON_BY_ID[plan.weapon].speed && ai.target && (ai.level?.repick ?? true) && !plan.noisy) {
         let best = null;
         for (let pw = 0.15; pw <= 1.001; pw += 0.05) {
           const hit = this.simulateShot(plan.weapon, s, s.aim, pw, s.facing);
@@ -1025,6 +1144,20 @@ export class Game {
       // retreat a little after dynamite
       if (ai.plan?.weapon === 'dynamit') { if (ai.plan.facing > 0) inp.left = true; else inp.right = true; }
     }
+  }
+
+  // A dry spot within hopping distance that has a clear line of sight to the target.
+  hopSpotNear(s, tgt) {
+    let best = null;
+    for (let dx = -300; dx <= 300; dx += 40) {
+      const x = tgt.x + dx;
+      if (Math.abs(dx) < 90 || x < 30 || x > this.W - 30) continue;
+      const spot = this.teleportSpot(x);
+      if (!spot || !this.lineOfSight({ x: spot.x, y: spot.y }, tgt)) continue;
+      const score = Math.abs(Math.abs(dx) - 170) + (spot.y > tgt.y ? 40 : 0); // mid range, preferably higher up
+      if (!best || score < best.score) best = { ...spot, score };
+    }
+    return best;
   }
 
   // Nothing solid between the sky and the snail's head.
@@ -1146,7 +1279,18 @@ export class Game {
 
     // aim crosshair + trajectory preview
     const a = this.active;
-    if (a && a.alive && this.phase === 'aim' && !this.hasFired && WEAPON_BY_ID[this.weaponId].marker) {
+    if (a && a.alive && this.phase === 'aim' && !this.hasFired && WEAPON_BY_ID[this.weaponId].teleport) {
+      // landing marker for the snail hop: green where it works, red where it does not
+      const mx = this.markerX, spot = this.teleportSpot(mx), gy = spot ? spot.y : this.terrain.groundBelow(mx, 0);
+      const ly = gy > 0 ? gy : this.waterY;
+      ctx.setLineDash([4, 6]);
+      ctx.strokeStyle = spot ? 'rgba(200,255,106,0.9)' : 'rgba(255,90,60,0.9)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(mx, ly - 70); ctx.lineTo(mx, ly - 4); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.ellipse(mx, ly, 18, 6, 0, 0, Math.PI * 2); ctx.stroke();
+      if (!spot) { ctx.beginPath(); ctx.moveTo(mx - 8, ly - 44); ctx.lineTo(mx + 8, ly - 28); ctx.moveTo(mx + 8, ly - 44); ctx.lineTo(mx - 8, ly - 28); ctx.stroke(); }
+    } else if (a && a.alive && this.phase === 'aim' && !this.hasFired && WEAPON_BY_ID[this.weaponId].marker) {
       // ground marker for salt rain
       const mx = this.markerX;
       ctx.setLineDash([6, 6]);
@@ -1330,7 +1474,7 @@ export class Game {
       charging: this.charging,
       message: this.messageTimer > 0 ? this.message : null,
       teams: this.teams.map((t) => ({ name: t.name, color: t.color, hp: t.snails.reduce((a, s) => a + (s.alive ? s.hp : 0), 0), alive: t.snails.filter((s) => s.alive).length })),
-      ai: !!this.ai,
+      ai: this.ai && this.active ? this.teams[this.active.team].ai : false,
       turn: this.turnCount,
       ammo: this.active ? this.teams[this.active.team].ammo : null,
       crates: this.crates.length,

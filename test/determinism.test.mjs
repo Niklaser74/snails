@@ -239,6 +239,76 @@ test('Snigelpost: a turn played on one device resumes exactly on the other', () 
   assert.ok(a2.paused || a2.phase === 'over');
 });
 
+test('shell shove: snails right in front take damage and fly, nothing else moves', () => {
+  const c = cfg(31);
+  c.teams[0].ai = false; c.teams[1].ai = false;
+  const g = new Game(null, c);
+  const s = g.active;
+  // park an enemy right in front, and a friend far away
+  const enemy = g.snails.find((o) => o.team !== s.team);
+  enemy.x = s.x + s.facing * 20; enemy.y = s.y; enemy.vx = 0; enemy.vy = 0;
+  const far = g.snails.find((o) => o !== s && o !== enemy);
+  const farHp = far.hp;
+  g.input.weapon = 'skalstot'; g.tick();
+  assert.equal(g.weaponId, 'skalstot');
+  g.input.fire = true; g.tick(); g.input.fire = false; g.tick();
+  assert.equal(enemy.hp, 100 - 22, 'enemy in front should take shove damage');
+  assert.ok(enemy.airborne && Math.sign(enemy.vx) === s.facing && enemy.vy < 0, 'enemy should fly away in the facing direction');
+  assert.equal(far.hp, farHp, 'a snail out of reach was hit');
+  assert.equal(g.phase, 'retreat');
+  assert.equal(g.teams[s.team].ammo.skalstot, Infinity);
+});
+
+test('snail hop: teleports to the marker on dry ground and ends the turn, refuses water', () => {
+  const c = cfg(32);
+  c.teams[0].ai = false; c.teams[1].ai = false;
+  const g = new Game(null, c);
+  const s = g.active, team = g.teams[s.team];
+  team.ammo.snigelhopp = 1;
+  g.input.weapon = 'snigelhopp'; g.tick();
+  assert.equal(g.weaponId, 'snigelhopp');
+  // find a dry column and steer the marker there
+  let target = null;
+  for (let x = 100; x < g.W - 100 && !target; x += 25) if (g.teleportSpot(x) && Math.abs(x - g.markerX) > 40) target = g.teleportSpot(x);
+  assert.ok(target, 'no dry spot on the map');
+  for (let i = 0; i < 60 * 8 && Math.abs(g.markerX - target.x) > 3; i++) { g.input.left = g.markerX > target.x; g.input.right = g.markerX < target.x; g.tick(); }
+  g.input.left = g.input.right = false;
+  const spot = g.teleportSpot(g.markerX);
+  assert.ok(spot, 'marker should be on a valid spot');
+  g.input.fire = true; g.tick(); g.input.fire = false; g.tick();
+  assert.equal(s.x, spot.x); assert.equal(s.y, spot.y);
+  assert.equal(team.ammo.snigelhopp, 0);
+  assert.equal(g.phase, 'retreat');
+  assert.ok(g.timer <= 1, 'the hop should end the turn quickly');
+  // a spot occupied by another snail is refused, and so is the sea
+  const other = g.snails.find((o) => o !== s && o.alive);
+  assert.equal(g.teleportSpot(other.x), null, 'landing on a snail should be refused');
+  g.waterY = 0; // flood everything: no dry ground anywhere
+  assert.equal(g.teleportSpot(spot.x), null, 'a flooded column should be refused');
+  const h1 = new Game(null, c);
+  h1.teams[h1.active.team].ammo.snigelhopp = 1;
+  h1.input.weapon = 'snigelhopp'; h1.tick();
+  h1.markerX = 20; // outside the terrain near the left edge: usually water
+  if (!h1.teleportSpot(20)) {
+    h1.input.fire = true; h1.tick(); h1.input.fire = false; h1.tick();
+    assert.equal(h1.phase, 'aim', 'firing at water should not end the turn');
+    assert.equal(h1.teams[h1.active.team].ammo.snigelhopp, 1, 'ammo must not be spent on a refused hop');
+  }
+});
+
+test('AI levels: recorded with the match, replay the same, and play differently', () => {
+  const mk = (lvl) => ({ ...cfg(2026), teams: cfg(2026).teams.map((t) => ({ ...t, ai: lvl })) });
+  const easy = new Game(null, mk('easy')), hard = new Game(null, mk('hard')), old = new Game(null, mk(true));
+  assert.deepEqual(easy.recording.teams.map((t) => t.ai), ['easy', 'easy']);
+  assert.deepEqual(old.recording.teams.map((t) => t.ai), ['normal', 'normal'], 'true should mean normal');
+  assert.equal(easy.ai.level.aimStep, 10); assert.equal(hard.ai.level.aimStep, 3);
+  run(easy, 60 * 90); run(hard, 60 * 90);
+  assert.notEqual(easy.stateHash(), hard.stateHash(), 'easy and hard played the same match');
+  const rep = Game.fromRecording(null, JSON.parse(JSON.stringify(hard.recording)));
+  run(rep, hard.tickCount);
+  assert.equal(rep.stateHash(), hard.stateHash(), 'hard AI recording did not replay');
+});
+
 test('turn time and sudden death are match rules that travel with the recording', () => {
   const base = cfg(99);
   const std = new Game(null, base);

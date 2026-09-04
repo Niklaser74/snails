@@ -13,7 +13,7 @@
 Snäckmageddon är ett turbaserat artilleri-spel i klassisk Worms-anda, fast med afrikanska jättesnäckor i stället för maskar. Långsamma i steget, snabba på avtryckaren.
 
 - 2–4 lag, spela mot varandra på samma skärm eller mot datorn
-- Sex vapen: bazooka som driver med vinden, studsande granat, saltspruta, dynamit, slemklot som klibbar fast på motståndaren och saltregn från himlen
+- Åtta vapen: bazooka som driver med vinden, studsande granat, saltspruta, dynamit, slemklot som klibbar fast på motståndaren, saltregn från himlen, skalstöt som knuffar och snigelhopp som teleporterar
 - Förstörbar terräng, lådor med hälsa och ammunition, plötslig död med stigande vatten
 - Prickad förhandsbana medan du siktar
 - Fungerar i mobilen med touchkontroller, kan installeras som app och spelas offline
@@ -26,7 +26,7 @@ Gratis och utan reklam. Vill du stötta utvecklingen får du gärna betala vad d
 Snäckmageddon is a turn-based artillery game in the classic Worms spirit, with giant African land snails instead of worms. Slow on their feet, quick on the trigger.
 
 - 2–4 teams, hot-seat on one screen or against the computer
-- Six weapons: a wind-swept bazooka, a bouncing grenade, a salt shaker, dynamite, a slime ball that sticks to your opponent and salt rain from the sky
+- Eight weapons: a wind-swept bazooka, a bouncing grenade, a salt shaker, dynamite, a slime ball that sticks to your opponent, salt rain from the sky, a shell shove that knocks snails flying and a snail hop that teleports
 - Destructible terrain, crates with health and ammo, sudden death with rising water
 - A dotted trajectory preview while you aim
 - Plays on phones with touch controls, installs as an app and works offline
