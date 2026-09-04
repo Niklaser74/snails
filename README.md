@@ -3,7 +3,7 @@
 *Snäckmageddon is a Worms-style, turn-based artillery game with giant African
 land snails, built as an installable PWA with no build step. The interface is
 available in Swedish and English (auto-detected, switchable in the menu). Play
-it at https://snails.se/.*
+it at https://snails.se/ or on itch.io: https://knackpot.itch.io/snailmageddon.*
 
 Turbaserat artilleri-spel i Worms Armageddon-anda, fast med **afrikanska jättesnäckor**
 (Achatina) i stället för maskar. Byggt som en installerbar PWA i ren HTML/Canvas/JavaScript

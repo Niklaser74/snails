@@ -58,7 +58,7 @@ Målet är att en match ska kännas bra att spela klart och vilja spelas igen.
 
 ## Fas 4 – Distribution (löpande från fas 1)
 
-- **itch.io** direkt. Gratis, ger första utomstående spelare.
+- ~~**itch.io** direkt~~ – publik 2026-09-04: https://knackpot.itch.io/snailmageddon
 - **Poki och CrazyGames.** Webbspelsportaler med egna spelare och
   annonsintäkter som delas med utvecklaren. Kräver deras SDK och en QA-runda.
 - **Google Play** via PWABuilder/TWA. Nästan ingen extra kod.
@@ -130,4 +130,4 @@ Räkneexempel med försiktiga antaganden, inte prognos:
 3. ~~Två nya vapen och lådor~~ – klart 2026-09-04 (Slemklot, Saltregn, ammunition, lådor).
 4. ~~Tutorial och engelsk översättning av all text~~ – klart 2026-09-04.
 5. ~~Mätning på plats~~ – klart 2026-09-04 (Supabase, se `supabase/README.md`).
-6. Ladda upp på itch.io och skicka in till Poki – kodsidan klar 2026-09-04 (byggskript, release-workflow, Poki-SDK-adapter, butikstexter och bilder i `docs/store/`). Kvar: konton, uppladdning och inskick, se `docs/store/itch.md` och `docs/store/poki.md`.
+6. ~~Ladda upp på itch.io~~ – publik 2026-09-04 på https://knackpot.itch.io/snailmageddon, butler-push från CI. Kvar: skicka in till Poki när snails.se är uppe, se `docs/store/poki.md`.
