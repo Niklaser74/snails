@@ -239,5 +239,32 @@ test('Snigelpost: a turn played on one device resumes exactly on the other', () 
   assert.ok(a2.paused || a2.phase === 'over');
 });
 
+test('turn time and sudden death are match rules that travel with the recording', () => {
+  const base = cfg(99);
+  const std = new Game(null, base);
+  assert.deepEqual(std.rules, { turnTime: 45, suddenDeath: 16 }, 'defaults');
+  assert.equal(std.timer, 45);
+  const fast = new Game(null, { ...base, turnTime: 20, suddenDeath: 0 });
+  assert.equal(fast.timer, 20);
+  assert.equal(fast.recording.turnTime, 20);
+  assert.equal(fast.recording.suddenDeath, 0);
+  // unknown values fall back to the defaults, so a tampered config cannot desync a match
+  assert.deepEqual(new Game(null, { ...base, turnTime: 7, suddenDeath: 'x' }).rules, { turnTime: 45, suddenDeath: 16 });
+  // sudden death off: the water never rises, however long the match runs
+  const water0 = fast.waterY;
+  run(fast, TICKS);
+  assert.ok(fast.turnCount > 16, `expected more than 16 turns, got ${fast.turnCount}`);
+  assert.equal(fast.waterY, water0, 'water rose with sudden death off');
+  assert.ok(std.waterY === water0, 'water should not have moved before the match ran');
+  // a replay of the fast game uses the fast rules and lands on the same state
+  const rec = JSON.parse(JSON.stringify(fast.recording));
+  const rep = Game.fromRecording(null, rec);
+  assert.deepEqual(rep.rules, { turnTime: 20, suddenDeath: 0 });
+  run(rep, fast.tickCount);
+  assert.equal(rep.stateHash(), fast.stateHash(), 'replay with rules diverged');
+  // the timer is part of the state hash, so two devices with different rules notice at once
+  assert.notEqual(new Game(null, { ...base, turnTime: 20 }).stateHash(), new Game(null, base).stateHash(), 'turn time not in the hash');
+});
+
 if (failed) { console.log(`\n${failed} test(s) failed`); process.exit(1); }
 console.log('\nall tests passed');

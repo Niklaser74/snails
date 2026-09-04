@@ -200,6 +200,57 @@ await test('language switch translates the menu and default team names', async (
   await page.close();
 });
 
+await test('settings: turn time, sudden death, volume and the mute button are remembered', async () => {
+  const { page, errors } = await open('/?seed=4242');
+  assert.equal(await page.inputValue('#opt-turntime'), '45');
+  assert.equal(await page.inputValue('#opt-sudden'), '16');
+  assert.equal(await page.inputValue('#opt-volume'), '80');
+  await page.selectOption('#opt-turntime', '20');
+  await page.selectOption('#opt-sudden', '0');
+  await page.fill('#opt-volume', '40');
+  await page.dispatchEvent('#opt-volume', 'input');
+  await page.selectOption('.team-row:nth-child(1) select', 'ai');
+  await page.selectOption('.team-row:nth-child(2) select', 'ai');
+  await page.click('#btn-start');
+  await page.waitForFunction(() => window.__game);
+  await page.evaluate(() => { window.__manualTick = true; });
+  const rules = await page.evaluate(() => ({ ...__game.rules, timer: __game.timer, rec: [__game.recording.turnTime, __game.recording.suddenDeath] }));
+  assert.deepEqual(rules, { turnTime: 20, suddenDeath: 0, timer: 20, rec: [20, 0] });
+  await page.waitForFunction(() => document.getElementById('hud-timer').textContent === '20');
+  // the HUD mute button flips the sound and the menu keeps the state
+  assert.equal(await page.locator('#btn-mute').textContent(), '🔊');
+  await page.click('#btn-mute');
+  assert.equal(await page.locator('#btn-mute').textContent(), '🔇');
+  assert.equal(await page.getAttribute('#btn-mute', 'aria-label'), 'Sound on');
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('snackmageddon.settings')));
+  assert.equal(saved.muted, true);
+  assert.equal(saved.volume, 0.4);
+  assert.equal(saved.turnTime, 20);
+  assert.equal(saved.suddenDeath, 0);
+  // a kill shot switches on slow motion: the loop then advances fewer ticks per real second
+  await page.evaluate(() => {
+    const g = __game;
+    const victim = g.snails.find((s) => s.alive && s.team !== g.active.team);
+    victim.hp = 5;
+    g.explosion(victim.x, victim.y - 10, 40, 50, null);
+  });
+  const slow = await page.evaluate(() => __game.slowmo);
+  assert.ok(slow > 0, 'slow motion did not start');
+  await page.evaluate(() => { window.__manualTick = false; });
+  const t0 = await page.evaluate(() => __game.tickCount);
+  await page.waitForTimeout(500);
+  const t1 = await page.evaluate(() => __game.tickCount);
+  assert.ok(t1 - t0 < 20, `expected slowed ticks, got ${t1 - t0} in 500 ms`);
+  // everything survives a reload
+  await page.reload();
+  await page.waitForSelector('#btn-start');
+  assert.equal(await page.inputValue('#opt-turntime'), '20');
+  assert.equal(await page.inputValue('#opt-sudden'), '0');
+  assert.equal(await page.inputValue('#opt-volume'), '40');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
 await test('first-match guide advances as the player walks, aims and fires', async () => {
   const { page, errors } = await open('/?seed=4242');
   await page.selectOption('.team-row:nth-child(2) select', 'ai');
@@ -313,6 +364,7 @@ await test('Snigelpost: two players trade turns through the server', async () =>
   // the match was created as best of 3 (the default), so the score shows in the waiting overlay
   assert.equal(fake.series.size, 1);
   assert.equal([...fake.series.values()][0].best_of, 3);
+  assert.deepEqual(fake.matches.get(matchId).config, { snailsPerTeam: 3, turnTime: 45, suddenDeath: 16 }, 'rules missing from the match config');
   // B gives up (two presses): match 1 to A, the series continues with match 2 where B starts
   await b.click('#btn-wait-resign'); await b.click('#btn-wait-resign');
   await b.waitForFunction(() => /gav upp|gave up/i.test(document.getElementById('wait-status').textContent));

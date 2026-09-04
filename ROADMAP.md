@@ -22,7 +22,8 @@ att göra det hållbart, roligare och till slut lönsamt.
 | Guide i första matchen | AI-svårighetsgrader |
 | Tester i CI (Node + Playwright) | Terrängteman (trädgårdsland, strand, regnskog) |
 | Förhandsbana vid sikte | Inställningar: dragtid, plötslig död, ljud av/på, gamepad |
-| | Riktigt ljud: bättre syntes eller inspelade ljud, musik |
+| Lagrat ljud: mastervolym, ljud av/på i HUD:en, lager av brus och toner | Inspelade ljud och musik |
+| Regler i menyn: dragtid, plötslig död; slow motion vid dödsskott | |
 
 ### Fas 2 – Snigelpost
 | Klart | Kvar |
@@ -82,8 +83,8 @@ Stripe när e-postkoppling finns, sedan säsongspass och belönad reklam.
 1. ~~**Snigelpost robust**: ge upp, revansch, vinst efter 14 dagars tystnad,
    städjobb, Open Graph-taggar, felrapportering~~ – klart 2026-09-04.
    ~~Serier, bäst av 1/3/5~~ – klart 2026-09-04.
-2. **Ljud och inställningar**: ljud av/på i HUD:en, dragtid, plötslig död,
-   bättre ljud, slow motion vid dödsskott.
+2. ~~**Ljud och inställningar**: ljud av/på i HUD:en, dragtid, plötslig död,
+   bättre ljud, slow motion vid dödsskott.~~ – klart 2026-09-04.
 3. **De två sista vapnen och AI-nivåer** (lätt, normal, svår).
 4. **E-postkoppling** av kontot, grunden för fas 3 och för att inte tappa
    spelare vid byte av telefon.

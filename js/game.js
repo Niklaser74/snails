@@ -35,9 +35,20 @@ const CLIMB = 8;
 const HEAD_H = 30;
 const SNAIL_SCALE = 1.2;
 const WIND_FORCE = 140;
-const TURN_TIME = 45;
+// Rules a match can change in the menu. They are part of the recording and of
+// a Snigelpost match's config, so every device plays by the same rules.
+export const DEFAULT_RULES = { turnTime: 45, suddenDeath: 16 }; // suddenDeath = turn after which the water rises, 0 = never
+export const TURN_TIMES = [20, 30, 45, 60, 90];
+export const SUDDEN_DEATHS = [0, 8, 12, 16, 24];
+export function normalizeRules(cfg) {
+  const tt = +cfg?.turnTime, sd = +cfg?.suddenDeath;
+  return {
+    turnTime: TURN_TIMES.includes(tt) ? tt : DEFAULT_RULES.turnTime,
+    suddenDeath: SUDDEN_DEATHS.includes(sd) ? sd : DEFAULT_RULES.suddenDeath,
+  };
+}
 const RETREAT_TIME = 4;
-const SUDDEN_DEATH_TURN = 16;
+const SLOWMO_TIME = 1.1; // seconds of real time the kill shot is shown slowed down
 
 const PHASES = ['init', 'aim', 'retreat', 'settle', 'over'];
 const INPUT_KEYS = ['left', 'right', 'up', 'down', 'fire', 'jump', 'weapon'];
@@ -73,6 +84,7 @@ export class Game {
     this.W = 1800;
     this.H = 800;
     this.style = config.style || 'cartoon';
+    this.rules = normalizeRules(config);
     this.replay = opts.replay || null;
     // Snigelpost: replay the recorded ticks, then hand control to the local player.
     // liveAfter = first tick that is played live; localTeams = team indices this client controls.
@@ -98,6 +110,8 @@ export class Game {
       seed: this.seed,
       teams: config.teams.map((t) => ({ name: t.name, color: t.color, ai: !!t.ai })),
       snailsPerTeam: config.snailsPerTeam || 3,
+      turnTime: this.rules.turnTime,
+      suddenDeath: this.rules.suddenDeath,
       inputs: [],
     };
     this.lastRecorded = null;
@@ -110,6 +124,7 @@ export class Game {
     this.particles = [];
     this.popups = [];
     this.shake = 0;
+    this.slowmo = 0; // seconds of slow motion left (visual only, never hashed)
     this.cam = { x: this.W / 2, y: this.H / 2, zoom: 1, manual: false, target: null };
     this.phase = 'init';
     this.message = '';
@@ -123,7 +138,7 @@ export class Game {
 
   static fromRecording(canvas, rec, hooks = {}, style = 'cartoon') {
     if (rec.rulesVersion !== RULES_VERSION) throw new Error(`Inspelningen har regelversion ${rec.rulesVersion}, spelet har ${RULES_VERSION}`);
-    return new Game(canvas, { teams: rec.teams, snailsPerTeam: rec.snailsPerTeam, style }, hooks, { replay: rec });
+    return new Game(canvas, { teams: rec.teams, snailsPerTeam: rec.snailsPerTeam, turnTime: rec.turnTime, suddenDeath: rec.suddenDeath, style }, hooks, { replay: rec });
   }
 
   // ---------- fixed-step driver ----------
@@ -250,7 +265,7 @@ export class Game {
     this.turnCount++;
     this.wind = Math.round((this.rng() * 2 - 1) * 10) / 10;
     const crate = this.turnCount > 1 && this.rng() < 0.4 ? this.spawnCrate() : null;
-    this.timer = TURN_TIME;
+    this.timer = this.rules.turnTime;
     this.phase = 'aim';
     this.power = 0;
     this.charging = false;
@@ -267,9 +282,10 @@ export class Game {
     }
     this.cam.manual = false;
     this.cam.target = s;
-    if (this.turnCount > SUDDEN_DEATH_TURN) {
+    if (this.rules.suddenDeath > 0 && this.turnCount > this.rules.suddenDeath) {
       this.waterY -= 7;
       this.say({ key: 'msg.sudden', team: team.name, name: s.name }, 2.5);
+      sfx.sudden();
     } else if (crate) {
       this.say({ key: crate.type === 'health' ? 'msg.crateHealth' : 'msg.crateWeapon' }, 2.5);
     } else {
@@ -358,7 +374,10 @@ export class Game {
       this.handleControl(dt);
     }
     if (this.phase === 'aim') {
+      const before = Math.ceil(this.timer);
       this.timer -= dt;
+      // countdown clicks for the last five seconds (audio only)
+      if (this.timer > 0 && Math.ceil(this.timer) < before && before <= 5 && this.isLocalTurn() && !this.replay) sfx.tickLow();
       if (this.timer <= 0) { this.timer = 0; this.phase = 'settle'; this.settleTimer = 0; }
     } else if (this.phase === 'retreat') {
       this.timer -= dt;
@@ -405,6 +424,7 @@ export class Game {
     s.alive = false;
     s.hp = 0;
     this.say({ key: 'msg.cracked', name: s.name }, 1.5);
+    sfx.cracked();
     this.explosion(s.x, s.y - 8, 30, 28, null);
     this.cam.target = s;
   }
@@ -544,9 +564,16 @@ export class Game {
 
   damage(s, amount, kind) {
     if (!s.alive || amount <= 0) return;
+    const wasUp = s.hp > 0;
     s.hp = Math.max(0, s.hp - amount);
     if (!this.headless) this.popups.push({ x: s.x, y: s.y - 40, text: `-${amount}`, life: 1.3, color: s.color });
     sfx.hurt();
+    // a kill shot on a snail that was still standing: show it in slow motion (visual only)
+    if (wasUp && s.hp <= 0 && kind === 'blast' && !this.headless && !this.replay && this.slowmo <= 0) {
+      this.slowmo = SLOWMO_TIME;
+      this.cam.target = s;
+      sfx.slowmo();
+    }
   }
 
   // ---------- weapons ----------

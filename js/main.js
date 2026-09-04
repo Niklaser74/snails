@@ -1,12 +1,12 @@
-import { Game, WEAPONS, TICK, RULES_VERSION } from './game.js';
+import { Game, WEAPONS, TICK, RULES_VERSION, DEFAULT_RULES, TURN_TIMES, SUDDEN_DEATHS, normalizeRules } from './game.js';
 import { snigelpost } from './online.js';
 import { push } from './push.js';
 import { SNAIL_STYLES, TEAM_COLORS } from './snails.js';
-import { unlockAudio } from './audio.js';
+import { unlockAudio, sfx } from './audio.js';
 import { LANGS, t, fmt, setLang, getLang, detectLang, applyDom } from './i18n.js';
 import { initAnalytics, track, setAnalyticsLang, installErrorReporting } from './analytics.js';
 import { platform } from './platform.js';
-import { setMuted, isMuted } from './audio.js';
+import { setMuted, isMuted, setVolume } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -34,7 +34,33 @@ function saveSettings(s) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(s)); } catch { /* ignore */ }
 }
 const DEFAULT_STYLE = 'cartoon'; // vald standarddesign: Tecknad (Worms-stil)
-const settings = Object.assign({ teams: 2, per: 3, style: DEFAULT_STYLE, rows: [], lang: null, tutorialDone: false }, loadSettings());
+const settings = Object.assign({ teams: 2, per: 3, style: DEFAULT_STYLE, rows: [], lang: null, tutorialDone: false, ...DEFAULT_RULES, volume: 0.8, muted: false }, loadSettings());
+Object.assign(settings, normalizeRules(settings));
+
+// ---------- sound ----------
+setVolume(settings.volume);
+setMuted(settings.muted);
+const muteBtn = $('btn-mute');
+function renderMute() {
+  muteBtn.textContent = settings.muted ? '🔇' : '🔊';
+  muteBtn.classList.toggle('off', settings.muted);
+  muteBtn.setAttribute('aria-label', t(settings.muted ? 'aria.unmute' : 'aria.mute'));
+}
+function toggleMute() {
+  settings.muted = !settings.muted;
+  setMuted(settings.muted);
+  saveSettings(settings);
+  renderMute();
+}
+muteBtn.addEventListener('click', toggleMute);
+$('opt-volume').value = Math.round(settings.volume * 100);
+$('opt-volume').addEventListener('input', () => {
+  settings.volume = +$('opt-volume').value / 100;
+  setVolume(settings.volume);
+  if (settings.muted && settings.volume > 0) { settings.muted = false; setMuted(false); renderMute(); }
+  saveSettings(settings);
+});
+$('opt-volume').addEventListener('change', () => { unlockAudio(); sfx.crate(); });
 
 // ---------- language ----------
 setLang(settings.lang || detectLang());
@@ -71,6 +97,8 @@ function applyLanguage() {
   applyDom();
   document.title = t('app.name');
   renderStyleOptions();
+  renderRuleOptions();
+  renderMute();
   // team names that are still the default of some language follow the language switch
   document.querySelectorAll('.team-row').forEach((row, i) => {
     const input = row.querySelector('input');
@@ -107,6 +135,20 @@ let matchStats = null; // { t0, weapons } for the running match
 // ---------- menu ----------
 $('opt-teams').value = settings.teams;
 $('opt-per').value = settings.per;
+// rules: turn time and sudden death
+for (const v of TURN_TIMES) $('opt-turntime').append(new Option(t('menu.seconds', { n: v }), v));
+for (const v of SUDDEN_DEATHS) $('opt-sudden').append(new Option(v === 0 ? t('menu.suddenOff') : t('menu.suddenAfter', { n: v }), v));
+$('opt-turntime').value = settings.turnTime;
+$('opt-sudden').value = settings.suddenDeath;
+function renderRuleOptions() {
+  [...$('opt-turntime').options].forEach((o) => { o.textContent = t('menu.seconds', { n: +o.value }); });
+  [...$('opt-sudden').options].forEach((o) => { o.textContent = +o.value === 0 ? t('menu.suddenOff') : t('menu.suddenAfter', { n: +o.value }); });
+}
+function readRules() {
+  const r = normalizeRules({ turnTime: $('opt-turntime').value, suddenDeath: $('opt-sudden').value });
+  Object.assign(settings, r);
+  return r;
+}
 renderStyleOptions();
 styleSel.value = settings.style;
 
@@ -142,8 +184,9 @@ function readConfig() {
   settings.per = +$('opt-per').value;
   settings.style = styleSel.value;
   settings.rows = rows;
+  const rules = readRules();
   saveSettings(settings);
-  return { teams: rows, snailsPerTeam: settings.per, style: settings.style };
+  return { teams: rows, snailsPerTeam: settings.per, style: settings.style, ...rules };
 }
 
 let starting = false;
@@ -607,7 +650,7 @@ if (snigelpost.available()) {
     const b = $('btn-online-create');
     b.disabled = true;
     settings.playerName = $('opt-name').value.trim().slice(0, 24); saveSettings(settings);
-    try { const m = await snigelpost.create(+$('opt-per').value, playerName(), +$('opt-bestof').value); await openMatch(m.id); }
+    try { const rules = readRules(); saveSettings(settings); const m = await snigelpost.create({ snailsPerTeam: +$('opt-per').value, ...rules }, playerName(), +$('opt-bestof').value); await openMatch(m.id); }
     catch (e) { $('online-status').textContent = /anonymous|signup|sign-in|disabled/i.test(e.message) ? t('online.disabled') : t('online.error', { msg: e.message }); }
     b.disabled = false;
   });
@@ -761,8 +804,12 @@ let acc = 0;
 function frame(ts) {
   requestAnimationFrame(frame);
   if (!game) return;
-  acc += Math.min(0.25, (ts - lastTs) / 1000);
+  const real = Math.min(0.25, (ts - lastTs) / 1000);
   lastTs = ts;
+  // slow motion after a kill shot: the simulation still advances in whole
+  // ticks, it just gets fewer of them per real second, so nothing desyncs
+  if (game.slowmo > 0 && !replayUntil) { acc += real * 0.3; game.slowmo -= real; }
+  else acc += real;
   let n = 0;
   // window.__manualTick lets tests drive game.tick() themselves
   if (replayUntil) {

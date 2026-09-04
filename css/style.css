@@ -52,6 +52,8 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #5fb0ea; fon
 .tbtn.fire.down { background: rgba(255,120,80,.95); }
 @media (hover: hover) and (pointer: fine) { .touch { opacity: .55; } .touch:hover { opacity: 1; } }
 
+.hud-btns { display: flex; gap: 6px; }
+.icon-btn.off { opacity: .6; }
 .icon-btn { width: 38px; height: 34px; border: none; border-radius: 10px; background: var(--hud); color: #fff; font-size: 16px; cursor: pointer; flex: none; }
 @media (max-width: 600px) {
   .message { position: absolute; left: 0; right: 0; top: 96px; font-size: 16px; padding: 0 70px; }
@@ -104,6 +106,8 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #5fb0ea; fon
 .tagline { margin: 0 0 16px; color: #6a5a4a; }
 .row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
 .row label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: #6a5a4a; }
+.row.rules label.volume { justify-content: flex-end; }
+input[type=range] { width: 130px; accent-color: var(--accent); margin: 8px 0; }
 select, input[type=text] { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: #fff; color: var(--ink); }
 .team-rows { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
 .team-row { display: grid; grid-template-columns: 22px 1fr auto auto; gap: 8px; align-items: center; }

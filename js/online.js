@@ -3,16 +3,17 @@
 // Opening a match replays every turn (instantly, or visibly for the opponent's
 // last turn), then this device plays its own turn live and uploads the inputs.
 import { online } from './supa.js';
-import { Game, RULES_VERSION } from './game.js';
+import { Game, RULES_VERSION, normalizeRules } from './game.js';
 import { TEAM_COLORS } from './snails.js';
 
 export const snigelpost = {
   available() { return online.available(); },
 
-  async create(snailsPerTeam, name, bestOf = 3) {
+  // config: { snailsPerTeam, turnTime, suddenDeath }
+  async create(config, name, bestOf = 3) {
     return online.rpc('snails_create_match', {
       p_seed: (Math.random() * 2147483647) | 0,
-      p_config: { snailsPerTeam },
+      p_config: { snailsPerTeam: config.snailsPerTeam, ...normalizeRules(config) },
       p_name: name,
       p_rules_version: RULES_VERSION,
       p_best_of: bestOf,
@@ -62,6 +63,7 @@ export const snigelpost = {
     return {
       seed: match.seed,
       snailsPerTeam: match.config.snailsPerTeam || 3,
+      ...normalizeRules(match.config),
       style,
       teams: [
         { name: match.names?.['0'] || 'Värd', color: TEAM_COLORS[0].hex, ai: false },
@@ -80,7 +82,7 @@ export const snigelpost = {
     const inputs = turns.flatMap((t) => t.inputs);
     const opts = { localTeams: myTeam == null ? [] : [myTeam] };
     if (turns.length) {
-      opts.replay = { rulesVersion: RULES_VERSION, seed: match.seed, teams: cfg.teams, snailsPerTeam: cfg.snailsPerTeam, inputs };
+      opts.replay = { rulesVersion: RULES_VERSION, seed: match.seed, teams: cfg.teams, snailsPerTeam: cfg.snailsPerTeam, turnTime: cfg.turnTime, suddenDeath: cfg.suddenDeath, inputs };
       opts.liveAfter = match.tick_count;
     }
     const game = new Game(canvas, cfg, hooks, opts);

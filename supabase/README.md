@@ -71,7 +71,10 @@ Serier (`migrations/20260904210000_series.sql`): varje match tillhör en serie i
 `snails_series` (bäst av 1, 3 eller 5; standard 3). Serien räknar vinster per
 spelare, och när en match är slut skapar `snails_series_after_finish` nästa
 match med omvänd startordning tills någon har tillräckligt många vinster.
-`snails_create_match` tar `p_best_of`; `snails_my_matches` visar bara seriens
+`snails_create_match` tar `p_best_of` och en `p_config` med `snailsPerTeam`,
+`turnTime` (20/30/45/60/90) och `suddenDeath` (0 = aldrig, annars draget då
+vattnet börjar stiga); okända värden faller tillbaka på 45 och 16 på alla
+enheter; `snails_my_matches` visar bara seriens
 aktuella match; `snails_extend_series` förlänger en avgjord serie till bäst av
 3 eller 5 om det ännu inte är avgjort på den längden (t.ex. 2–0 i bäst av 3 kan
 bli bäst av 5). `snails_rematch` startar en ny serie med samma längd, eller
