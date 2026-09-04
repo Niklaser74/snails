@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
     const { match_id, event } = await req.json();
     if (typeof match_id !== 'string') return json({ error: 'match_id required' }, 400);
 
-    const rows = await (await rest(`snails_matches?id=eq.${encodeURIComponent(match_id)}&select=id,host,guest,names,status,turn_team`)).json();
+    const rows = await (await rest(`snails_matches?id=eq.${encodeURIComponent(match_id)}&select=id,host,guest,names,status,turn_team,series_id`)).json();
     const m = rows[0];
     if (!m) return json({ error: 'no such match' }, 404);
     const me = m.host === uid ? 0 : m.guest === uid ? 1 : null;
@@ -59,12 +59,25 @@ Deno.serve(async (req) => {
     const publicKey = b64url(new Uint8Array([4, ...b64urlDecode(jwk.x), ...b64urlDecode(jwk.y)]));
     const vapid = { publicKey, jwk };
 
+    // Series (best of 3/5): add the score from the receiver's point of view and open the current match.
+    let score = '', url = `${SITE}/?match=${m.id}`;
+    if (m.series_id) {
+      const srows = await (await rest(`snails_series?id=eq.${m.series_id}&select=host,best_of,wins_host,wins_guest,status,current_match`)).json();
+      const s = srows[0];
+      if (s) {
+        const otherIsHost = s.host === other;
+        const [wm, wt] = otherIsHost ? [s.wins_host, s.wins_guest] : [s.wins_guest, s.wins_host];
+        if (s.best_of > 1 || wm + wt > 0) score = ` (${wm}–${wt})`;
+        if (s.status !== 'finished' && s.current_match) url = `${SITE}/?match=${s.current_match}`;
+      }
+    }
+
     const myName = m.names?.[String(me)] || 'Motståndaren';
     let sent = 0;
     const dead: string[] = [];
     for (const s of subs) {
       const t = texts(s.lang, myName);
-      const payload = { title: s.lang === 'en' ? 'Snailmageddon' : 'Snäckmageddon', body: t[kind], url: `${SITE}/?match=${m.id}`, tag: `match-${m.id}` };
+      const payload = { title: s.lang === 'en' ? 'Snailmageddon' : 'Snäckmageddon', body: t[kind] + (kind === 'joined' ? '' : score), url, tag: m.series_id ? `series-${m.series_id}` : `match-${m.id}` };
       const status = await sendPush({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, vapid, SITE).catch(() => 0);
       if (status === 201 || status === 200) sent++;
       else if (status === 404 || status === 410) dead.push(s.endpoint);

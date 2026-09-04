@@ -91,6 +91,7 @@
       <p class="blurb" data-i18n="online.blurb">Spela mot en kompis i egen takt. Skapa en match, skicka länken, spela ditt drag när du hinner.</p>
       <div class="row">
         <label><span data-i18n="online.name">Ditt namn</span> <input type="text" id="opt-name" maxlength="24"></label>
+        <label><span data-i18n="online.bestOf">Serie</span> <select id="opt-bestof"><option value="1" data-i18n="online.bestOf1">En match</option><option value="3" selected data-i18n="online.bestOf3">Bäst av 3</option><option value="5" data-i18n="online.bestOf5">Bäst av 5</option></select></label>
         <button id="btn-online-create" class="primary" data-i18n="online.create">Skapa match</button>
       </div>
       <div id="online-list" class="online-list"></div>
@@ -104,6 +105,7 @@
 <div id="waiting" class="overlay" hidden>
   <div class="panel">
     <h2 id="wait-title"></h2>
+    <p id="wait-series" class="series" hidden></p>
     <p id="wait-text"></p>
     <div id="wait-invite" class="invite" hidden>
       <input id="wait-link" type="text" readonly>
@@ -118,7 +120,10 @@
       <button id="btn-wait-play" class="primary" data-i18n="online.playTurn" hidden>Spela draget</button>
       <button id="btn-wait-refresh" class="primary" data-i18n="online.refresh">Uppdatera</button>
       <button id="btn-wait-claim" class="primary" data-i18n="online.claim" hidden>Ta hem vinsten</button>
+      <button id="btn-wait-next" class="primary" data-i18n="online.next" hidden>Nästa match</button>
       <button id="btn-wait-rematch" class="primary" data-i18n="online.rematch" hidden>Revansch</button>
+      <button id="btn-wait-extend3" class="secondary" data-i18n="online.extend3" hidden>Utöka till bäst av 3</button>
+      <button id="btn-wait-extend5" class="secondary" data-i18n="online.extend5" hidden>Utöka till bäst av 5</button>
       <button id="btn-wait-menu" class="secondary" data-i18n="go.menu">Till menyn</button>
       <button id="btn-wait-resign" class="secondary danger" data-i18n="online.resign" hidden>Ge upp</button>
     </div>
@@ -150,9 +155,13 @@
 <div id="gameover" class="overlay" hidden>
   <div class="panel">
     <h2 id="go-title" data-i18n="go.title">Matchen är slut</h2>
+    <p id="go-series" class="series" hidden></p>
     <div class="actions">
       <button id="btn-again" class="primary" data-i18n="go.again">Spela igen</button>
+      <button id="btn-go-next" class="primary" data-i18n="online.next" hidden>Nästa match</button>
       <button id="btn-go-rematch" class="primary" data-i18n="online.rematch" hidden>Revansch</button>
+      <button id="btn-go-extend3" class="secondary" data-i18n="online.extend3" hidden>Utöka till bäst av 3</button>
+      <button id="btn-go-extend5" class="secondary" data-i18n="online.extend5" hidden>Utöka till bäst av 5</button>
       <button id="btn-tomenu" class="secondary" data-i18n="go.menu">Till menyn</button>
     </div>
   </div>

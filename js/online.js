@@ -9,13 +9,20 @@ import { TEAM_COLORS } from './snails.js';
 export const snigelpost = {
   available() { return online.available(); },
 
-  async create(snailsPerTeam, name) {
+  async create(snailsPerTeam, name, bestOf = 3) {
     return online.rpc('snails_create_match', {
       p_seed: (Math.random() * 2147483647) | 0,
       p_config: { snailsPerTeam },
       p_name: name,
       p_rules_version: RULES_VERSION,
+      p_best_of: bestOf,
     });
+  },
+  async extend(id, bestOf) { return online.rpc('snails_extend_series', { p_match: id, p_best_of: bestOf }); },
+  // the series continues in another match than this one
+  nextMatchId(match) {
+    const s = match?.series;
+    return s && s.status !== 'finished' && s.current_match && s.current_match !== match.id ? s.current_match : null;
   },
   async join(id, name) { return online.rpc('snails_join_match', { p_match: id, p_name: name }); },
   async get(id) { return online.rpc('snails_get_match', { p_match: id }); },

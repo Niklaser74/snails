@@ -55,6 +55,11 @@ async function open(url, viewport = { width: 1280, height: 720 }, extra = {}) {
   return { page, errors };
 }
 
+// Poll a Node-side condition (e.g. something the fake server recorded) for up to 5 s.
+async function until(cond, msg) {
+  for (let i = 0; i < 100; i++) { if (cond()) return; await new Promise((r) => setTimeout(r, 50)); }
+  assert.fail(msg);
+}
 const ticks = (page, n) => page.evaluate((n) => { const g = window.__game; for (let i = 0; i < n; i++) g.tick(); return { tick: g.tickCount, turn: g.turnCount, phase: g.phase, hash: g.stateHash() }; }, n);
 
 await test('menu and design page load without errors', async () => {
@@ -305,37 +310,63 @@ await test('Snigelpost: two players trade turns through the server', async () =>
   assert.equal(aState.team, 0);
   assert.equal(aState.paused, false);
   assert.equal(aState.waiting, true);
-  // B gives up (two presses), A polls and sees the finished match with a rematch button
+  // the match was created as best of 3 (the default), so the score shows in the waiting overlay
+  assert.equal(fake.series.size, 1);
+  assert.equal([...fake.series.values()][0].best_of, 3);
+  // B gives up (two presses): match 1 to A, the series continues with match 2 where B starts
   await b.click('#btn-wait-resign'); await b.click('#btn-wait-resign');
   await b.waitForFunction(() => /gav upp|gave up/i.test(document.getElementById('wait-status').textContent));
   assert.equal(fake.matches.get(matchId).status, 'finished');
   assert.equal(fake.matches.get(matchId).winner, 0, 'host should win when guest resigns');
-  assert.ok(fake.notifies.some((n) => n.match_id === matchId && n.event === 'resigned'), 'no resign notification');
+  await until(() => fake.notifies.some((n) => n.match_id === matchId && n.event === 'resigned'), 'no resign notification');
+  const ser = [...fake.series.values()][0];
+  assert.equal(ser.wins_host, 1); assert.equal(ser.status, 'playing'); assert.equal(ser.match_no, 2);
+  const m2id = ser.current_match;
+  assert.equal(fake.matches.get(m2id).host, ser.guest, 'match 2 should be started by the other player');
+  // B sees "next match" in the waiting overlay and it is B's turn there
+  await b.waitForFunction(() => !document.getElementById('btn-wait-next').hidden);
+  assert.match(await b.locator('#wait-series').textContent(), /0–1|0-1/);
+  await b.click('#btn-wait-next');
+  await b.waitForFunction(() => window.__game && __game.seed === 4322 && document.getElementById('waiting').hidden && __game.active.team === 0);
+  assert.equal(await b.evaluate(() => __game.tickCount), 0, 'match 2 should start fresh');
+  await shoot(b);
+  await b.waitForFunction(() => /skickat|sent/i.test(document.getElementById('wait-status').textContent));
+  // A: match 1 shows as won, series 1–0, and a "next match" button leads to match 2 where A now plays second
   await a.evaluate(() => window.dispatchEvent(new Event('visibilitychange'))); // same as the 8 s poll
   await a.waitForSelector('#gameover:not([hidden])');
-  assert.match(await a.locator('#go-title').textContent(), /vann|won/i);
-  assert.equal(await a.locator('#btn-go-rematch').isHidden(), false, 'rematch button missing');
-  // rematch: a new match with the same opponent, A plays first and gets the invite-free waiting box
-  await a.click('#btn-go-rematch');
-  await a.waitForFunction(() => window.__game && __game.seed === 4321);
-  const rematch = [...fake.matches.values()].find((m) => m.seed === 4321);
-  assert.ok(rematch && rematch.status === 'playing' && rematch.guest, 'rematch not created as a playing match');
-  assert.ok(fake.notifies.some((n) => n.match_id === rematch.id && n.event === 'rematch'), 'no rematch notification');
-  // timeout claim: after A's turn, pretend B has been silent for 15 days
-  await a.evaluate(() => { document.getElementById('waiting').hidden = true; __game.paused = false; });
+  assert.match(await a.locator('#go-title').textContent(), /1–0|1-0/);
+  assert.equal(await a.locator('#btn-go-next').isHidden(), false, 'next-match button missing');
+  assert.equal(await a.locator('#btn-go-rematch').isHidden(), true, 'rematch should wait until the series is over');
+  await a.click('#btn-go-next');
+  await a.waitForSelector('#replaybar:not([hidden])');
+  await a.click('#btn-skip-replay');
+  assert.equal(await a.evaluate(() => __game.active.team), 1, 'A should be team 1 in match 2');
+  // timeout claim after A's turn: pretend B has been silent for 15 days
   await shoot(a);
   await a.waitForFunction(() => /skickat|sent/i.test(document.getElementById('wait-status').textContent));
-  rematch.updated_at = new Date(Date.now() - 15 * 86400000).toISOString();
+  fake.matches.get(m2id).updated_at = new Date(Date.now() - 15 * 86400000).toISOString();
   await a.click('#btn-wait-refresh');
   await a.waitForTimeout(300);
   assert.equal(await a.locator('#btn-wait-claim').isHidden(), false, 'claim button should show after 14 silent days');
   await a.click('#btn-wait-claim');
   await a.waitForFunction(() => /tog hem|claimed/i.test(document.getElementById('wait-status').textContent));
-  assert.equal(fake.matches.get(rematch.id).winner, 0);
+  assert.equal(ser.status, 'finished', 'series should be decided 2–0');
+  assert.equal(ser.winner_user, ser.host);
+  // now a rematch (new series) is offered, as is extending to best of 5 (2–0 is not yet 3 wins)
+  await a.waitForFunction(() => !document.getElementById('btn-wait-rematch').hidden);
+  assert.equal(await a.locator('#btn-wait-extend5').isHidden(), false, 'extend-to-5 should be offered at 2–0');
+  assert.equal(await a.locator('#btn-wait-extend3').isHidden(), true);
+  await a.click('#btn-wait-rematch');
+  await a.waitForFunction(() => window.__game && __game.seed === 4321);
+  const rematch = [...fake.matches.values()].find((m) => m.seed === 4321);
+  assert.ok(rematch && rematch.status === 'playing' && rematch.guest, 'rematch not created as a playing match');
+  assert.equal(fake.series.get(rematch.series_id).best_of, 3, 'rematch keeps the series length');
+  assert.ok(fake.notifies.some((n) => n.match_id === rematch.id && n.event === 'rematch'), 'no rematch notification');
   // uncaught errors are reported to the usage counter (analytics is disabled on localhost, so check the hook is wired)
   assert.equal(await a.evaluate(() => typeof window.onerror !== 'undefined'), true);
-  // the match list in the menu shows the games with the right state
-  await a.click('#btn-wait-menu');
+  // the rematch starts straight into A's turn (A is host again); the HUD menu button leads back
+  await a.waitForFunction(() => document.getElementById('waiting').hidden && __game.active.team === 0);
+  await a.click('#btn-menu');
   await a.waitForSelector('.mrow');
   assert.match(await a.locator('.mrow .mname').first().textContent(), /Gäst|B|…|Snail|Snäcka/);
   assert.deepEqual(errors, []);

@@ -209,7 +209,7 @@ function toMenu() {
   $('replaybar').hidden = true;
   waiting.hidden = true;
   $('btn-again').hidden = false;
-  $('btn-go-rematch').hidden = true;
+  for (const id of ['btn-go-rematch', 'btn-go-next', 'btn-go-extend3', 'btn-go-extend5']) $(id).hidden = true;
   gameover.hidden = true;
   hud.hidden = true;
   menu.hidden = false;
@@ -278,9 +278,30 @@ function notice(text, ms = 6000) {
   clearTimeout(notice.timer);
   notice.timer = setTimeout(() => { el.hidden = true; }, ms);
 }
+function seriesText(m) {
+  const s = m.series;
+  if (!s || (s.best_of === 1 && !s.wins_me && !s.wins_them)) return '';
+  const label = t('online.bestOf' + s.best_of);
+  return t('online.score', { me: s.wins_me, them: s.wins_them, label, no: s.match_no });
+}
+// buttons that continue or extend a series; shared by the waiting and game-over overlays
+function seriesButtons(prefix, m) {
+  const s = m.series;
+  const next = snigelpost.nextMatchId(m);
+  const decided = (bo) => s && (s.wins_me >= Math.floor(bo / 2) + 1 || s.wins_them >= Math.floor(bo / 2) + 1);
+  const finishedSeries = m.status === 'finished' && (!s || s.status === 'finished');
+  $(prefix + 'next').hidden = !next;
+  $(prefix + 'rematch').hidden = !(finishedSeries && m.guest);
+  $(prefix + 'extend3').hidden = !(finishedSeries && s && m.guest && s.best_of < 3 && !decided(3));
+  $(prefix + 'extend5').hidden = !(finishedSeries && s && m.guest && s.best_of === 3 && !decided(5));
+}
 function matchLabel(m) {
   const opp = m.names?.[m.my_team === 0 ? '1' : '0'];
-  if (m.status === 'finished') return m.winner == null ? t('online.draw') : m.winner === m.my_team ? t('online.won') : t('online.lost');
+  const st = seriesText(m);
+  if (m.status === 'finished') {
+    const base = m.winner == null ? t('online.draw') : m.winner === m.my_team ? t('online.won') : t('online.lost');
+    return st ? `${base} · ${st}` : base;
+  }
   if (m.status === 'open' && m.my_team === 0) return t('online.open');
   return m.turn_team === m.my_team ? t('online.yourTurn') : t('online.theirTurn', { name: opp || '…' });
 }
@@ -298,7 +319,8 @@ async function refreshMatchList() {
       const mine = m.status !== 'finished' && m.turn_team === m.my_team && !(m.status === 'open' && m.turn_count >= 1);
       const row = document.createElement('div');
       row.className = 'mrow' + (mine ? ' turn' : '');
-      row.innerHTML = `<div><div class="mname">${escapeHtml(t('online.vs', { name: opp || '…' }))}</div><div class="mstate">${escapeHtml(matchLabel(m))}</div></div>
+      const sub = m.status === 'finished' ? matchLabel(m) : [matchLabel(m), seriesText(m)].filter(Boolean).join(' · ');
+      row.innerHTML = `<div><div class="mname">${escapeHtml(t('online.vs', { name: opp || '…' }))}</div><div class="mstate">${escapeHtml(sub)}</div></div>
         <button class="${mine ? 'play' : ''}">${mine ? t('online.play') : t('online.show')}</button><button class="del" title="${t('online.delete')}">✕</button>`;
       row.querySelector('button').addEventListener('click', () => openMatch(m.id));
       row.querySelector('.del').addEventListener('click', async () => { await snigelpost.remove(m.id).catch(() => {}); refreshMatchList(); });
@@ -385,9 +407,19 @@ $('btn-skip-replay').addEventListener('click', () => {
 function showGameOverOnline() {
   const m = onlineMatch?.match;
   if (!m) return;
-  $('go-title').textContent = m.winner == null ? t('online.draw') : m.winner === m.my_team ? t('online.won') : t('online.lost');
+  const s = m.series;
+  let title = m.winner == null ? t('online.draw') : m.winner === m.my_team ? t('online.won') : t('online.lost');
+  if (s && s.best_of > 1) {
+    const p = { me: s.wins_me, them: s.wins_them };
+    if (s.status === 'finished') title = s.won_by_me ? t('online.seriesWon', p) : s.wins_me === s.wins_them ? t('online.draw') : t('online.seriesLost', p);
+    else title = m.winner === m.my_team ? t('online.matchWon', p) : m.winner == null ? t('online.draw') : t('online.matchLost', p);
+  }
+  $('go-title').textContent = title;
+  const stx = seriesText(m);
+  $('go-series').hidden = !stx;
+  $('go-series').textContent = stx;
   $('btn-again').hidden = true;
-  $('btn-go-rematch').hidden = !m.guest;
+  seriesButtons('btn-go-', m);
   waiting.hidden = true;
   gameover.hidden = false;
 }
@@ -438,7 +470,10 @@ function renderWaiting() {
   $('btn-wait-resign').textContent = t('online.resign');
   resignArmed = false;
   $('btn-wait-claim').hidden = !(days >= 14);
-  $('btn-wait-rematch').hidden = m.status !== 'finished' || !m.guest;
+  seriesButtons('btn-wait-', m);
+  const stx = seriesText(m);
+  $('wait-series').hidden = !stx;
+  $('wait-series').textContent = stx;
   if (m.status === 'open') {
     $('wait-title').textContent = t('online.inviteTitle');
     $('wait-text').textContent = t('online.inviteText');
@@ -492,6 +527,22 @@ async function startRematch() {
 }
 $('btn-wait-rematch').addEventListener('click', startRematch);
 $('btn-go-rematch').addEventListener('click', startRematch);
+function openNext() { const id = snigelpost.nextMatchId(onlineMatch?.match); if (id) openMatch(id); }
+$('btn-wait-next').addEventListener('click', openNext);
+$('btn-go-next').addEventListener('click', openNext);
+async function extendSeries(bestOf) {
+  const o = onlineMatch;
+  if (!o) return;
+  try {
+    const n = await snigelpost.extend(o.id, bestOf);
+    push.notify(n.id, 'rematch');
+    await openMatch(n.id);
+  } catch (e) { notice(t('online.error', { msg: e.message })); }
+}
+for (const p of ['btn-wait-', 'btn-go-']) {
+  $(p + 'extend3').addEventListener('click', () => extendSeries(3));
+  $(p + 'extend5').addEventListener('click', () => extendSeries(5));
+}
 // "notify me" box in the waiting overlay
 let pushSub = undefined; // undefined = not checked yet
 async function renderPushBox(m) {
@@ -556,7 +607,7 @@ if (snigelpost.available()) {
     const b = $('btn-online-create');
     b.disabled = true;
     settings.playerName = $('opt-name').value.trim().slice(0, 24); saveSettings(settings);
-    try { const m = await snigelpost.create(+$('opt-per').value, playerName()); await openMatch(m.id); }
+    try { const m = await snigelpost.create(+$('opt-per').value, playerName(), +$('opt-bestof').value); await openMatch(m.id); }
     catch (e) { $('online-status').textContent = /anonymous|signup|sign-in|disabled/i.test(e.message) ? t('online.disabled') : t('online.error', { msg: e.message }); }
     b.disabled = false;
   });

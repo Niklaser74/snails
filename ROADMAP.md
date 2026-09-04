@@ -32,6 +32,7 @@ att göra det hållbart, roligare och till slut lönsamt.
 | Motståndarens drag i 3× med hoppa över | Åskådarläge och delbar replay av färdig match |
 | Push-notiser (egen Web Push, VAPID i Vault) | Serversidig verifiering av drag (edge-funktion kör simuleringen) |
 | Väntläge med automatisk uppdatering, ge upp, revansch, vinst efter tystnad, städjobb | |
+| Serier: bäst av 1/3/5 (standard 3), förläng en färdig match till en serie | |
 
 ### Fas 3 – Progression och identitet (ej påbörjad)
 Profil, kosmetik (intäktsytan), "Dagens skott" med topplista, rank och säsonger.
@@ -80,6 +81,7 @@ Stripe när e-postkoppling finns, sedan säsongspass och belönad reklam.
 
 1. ~~**Snigelpost robust**: ge upp, revansch, vinst efter 14 dagars tystnad,
    städjobb, Open Graph-taggar, felrapportering~~ – klart 2026-09-04.
+   ~~Serier, bäst av 1/3/5~~ – klart 2026-09-04.
 2. **Ljud och inställningar**: ljud av/på i HUD:en, dragtid, plötslig död,
    bättre ljud, slow motion vid dödsskott.
 3. **De två sista vapnen och AI-nivåer** (lätt, normal, svår).

@@ -67,6 +67,17 @@ Fler funktioner (`migrations/20260904190000_snigelpost_robust.sql`):
   ingen antagit på 30 dagar och färdiga matcher äldre än 90 dagar.
 - Händelsen `error` i `snails_events` är klientfel (max fem per sidladdning).
 
+Serier (`migrations/20260904210000_series.sql`): varje match tillhör en serie i
+`snails_series` (bäst av 1, 3 eller 5; standard 3). Serien räknar vinster per
+spelare, och när en match är slut skapar `snails_series_after_finish` nästa
+match med omvänd startordning tills någon har tillräckligt många vinster.
+`snails_create_match` tar `p_best_of`; `snails_my_matches` visar bara seriens
+aktuella match; `snails_extend_series` förlänger en avgjord serie till bäst av
+3 eller 5 om det ännu inte är avgjort på den längden (t.ex. 2–0 i bäst av 3 kan
+bli bäst av 5). `snails_rematch` startar en ny serie med samma längd, eller
+returnerar den pågående seriens aktuella match. `snails_get_match` returnerar
+`series` med ställning sett från anroparen.
+
 Kända begränsningar:
 - Servern kör inte simuleringen själv; den litar på klientens hash. Motståndarens
   klient jämför sin egen hash med den sparade och varnar vid avvikelse.
@@ -79,7 +90,8 @@ Web Push utan tredjepartstjänst. Klienten (`js/push.js`) prenumererar via
 service workern och sparar prenumerationen med `snails_save_push`. Efter varje
 inskickat drag anropar klienten edge-funktionen `notify-turn`
 (`supabase/functions/notify-turn/`), som kontrollerar att anroparen är med i
-matchen och skickar en notis till motståndarens enheter. Kryptot (RFC 8291
+matchen och skickar en notis till motståndarens enheter. I en serie läggs
+ställningen till i texten och länken pekar på seriens aktuella match. Kryptot (RFC 8291
 och VAPID) ligger i `webpush.js` och testas i `test/webpush.test.mjs`.
 
 - Publik VAPID-nyckel: `VAPID_PUBLIC_KEY` i `js/config.js`.
