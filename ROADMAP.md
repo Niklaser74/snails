@@ -1,6 +1,6 @@
 # Snäckmageddon – utvecklingsplan
 
-Status: MVP live på https://niklaser74.github.io/snails/ (2026-09-04).
+Status: MVP live på https://snails.se/ (2026-09-04).
 Lokalt hotseat + AI, 4 vapen, förstörbar terräng, 5 snäckstilar, PWA offline.
 
 ## Tesen: dra spelet mot asynkront multiplayer

@@ -3,7 +3,7 @@
 *Snäckmageddon is a Worms-style, turn-based artillery game with giant African
 land snails, built as an installable PWA with no build step. The interface is
 available in Swedish and English (auto-detected, switchable in the menu). Play
-it at https://niklaser74.github.io/snails/.*
+it at https://snails.se/.*
 
 Turbaserat artilleri-spel i Worms Armageddon-anda, fast med **afrikanska jättesnäckor**
 (Achatina) i stället för maskar. Byggt som en installerbar PWA i ren HTML/Canvas/JavaScript
@@ -17,8 +17,9 @@ Spelet måste serveras över HTTP (ES-moduler + service worker fungerar inte via
 npx serve .          # eller: python3 -m http.server 8080
 ```
 
-Öppna sedan `http://localhost:8080` (eller den port som skrivs ut). På GitHub Pages
-fungerar repot som det är – peka Pages på `main`-branchen, roten.
+Öppna sedan `http://localhost:8080` (eller den port som skrivs ut). Publiceringen
+sker automatiskt till GitHub Pages vid varje push till `main`, på det egna
+domännamnet **snails.se** (filen `CNAME`).
 
 ## Snäckdesign
 

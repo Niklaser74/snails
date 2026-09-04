@@ -4,7 +4,7 @@ Poki tar in spel via https://developers.poki.com/ (Submit your game). De spelar
 igenom spelet själva och ger feedback innan det läggs ut. Räkna med några
 veckors ledtid och en QA-runda.
 
-**Länk att skicka in:** https://niklaser74.github.io/snails/?platform=poki
+**Länk att skicka in:** https://snails.se/?platform=poki
 (SDK:n laddas bara i det läget, spelet fungerar utan den om reklam blockeras.)
 
 ## Vad som redan är på plats i koden
