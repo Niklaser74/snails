@@ -1,7 +1,10 @@
 // Determinism tests for the simulation. Runs headless in Node: no canvas, no DOM.
 //   node test/determinism.test.mjs
 import assert from 'node:assert/strict';
-import { Game, RULES_VERSION } from '../js/game.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { Game, RULES_VERSION, SUPPORTED_RULES, weaponsFor } from '../js/game.js';
 
 const cfg = (seed) => ({
   seed,
@@ -216,7 +219,7 @@ test('Snigelpost: a turn played on one device resumes exactly on the other', () 
   const turn1 = { start: 0, end: a.tickCount, inputs: a.inputsSince(0), hash: a.stateHash() };
   assert.ok(turn1.inputs.length > 2 && turn1.inputs.every(([t]) => t < turn1.end));
   // device B (guest): replay turn 1, verify, play turn 2
-  const rec1 = { rulesVersion: 2, seed: 555, teams: cfg.teams, snailsPerTeam: 2, inputs: turn1.inputs };
+  const rec1 = { rulesVersion: RULES_VERSION, seed: 555, teams: cfg.teams, snailsPerTeam: 2, inputs: turn1.inputs };
   const b = new Game(null, cfg, {}, { replay: rec1, liveAfter: turn1.end, localTeams: [1] });
   while (b.tickCount < turn1.end) b.tick();
   assert.equal(b.stateHash(), turn1.hash, 'guest state differs after replaying the host turn');
@@ -307,6 +310,42 @@ test('AI levels: recorded with the match, replay the same, and play differently'
   const rep = Game.fromRecording(null, JSON.parse(JSON.stringify(hard.recording)));
   run(rep, hard.tickCount);
   assert.equal(rep.stateHash(), hard.stateHash(), 'hard AI recording did not replay');
+});
+
+// Golden fixtures: recordings made by the code of each rules version, with the
+// hash at every turn. If any of them diverge, the simulation changed for that
+// version, which is only allowed as a new rules version (docs/REGELVERSIONER.md).
+const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
+for (const v of SUPPORTED_RULES) {
+  test(`rules v${v}: golden recordings replay hash for hash`, () => {
+    const file = path.join(fixtureDir, `rules-v${v}.json`);
+    assert.ok(fs.existsSync(file), `missing fixture ${file}: run node test/make-fixture.mjs . > ${file} when introducing v${v}`);
+    const fx = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.equal(fx.rulesVersion, v);
+    for (const m of fx.matches) {
+      const g = Game.fromRecording(null, m.recording);
+      assert.equal(g.rulesVersion, v);
+      assert.equal(g.weapons.length, weaponsFor(v).length);
+      for (const [tick, hash] of m.hashes) {
+        while (g.tickCount < tick) g.tick();
+        assert.equal(g.stateHash(), hash, `${m.name}: v${v} simulation diverged at tick ${tick}`);
+      }
+      assert.equal(g.phase, m.phase);
+    }
+  });
+}
+test('current rules version has a fixture and unsupported versions are refused', () => {
+  assert.ok(SUPPORTED_RULES.includes(RULES_VERSION));
+  assert.ok(fs.existsSync(path.join(fixtureDir, `rules-v${RULES_VERSION}.json`)), 'the current version needs its golden fixture');
+  assert.throws(() => new Game(null, { ...cfg(1), rulesVersion: 1 }), /not supported/);
+  assert.throws(() => Game.fromRecording(null, { ...new Game(null, cfg(1)).recording, rulesVersion: 99 }), /regelversion/);
+  // an old version has the old weapon list, and the recording says which version it is
+  const old = new Game(null, { ...cfg(5), rulesVersion: 2 });
+  assert.equal(old.weapons.length, 6);
+  assert.equal(old.recording.rulesVersion, 2);
+  assert.equal(old.teams[0].ammo.skalstot, undefined);
+  old.input.weapon = 'skalstot'; old.tick();
+  assert.equal(old.weaponId, 'bazooka', 'a v3 weapon must not exist in a v2 match');
 });
 
 test('turn time and sudden death are match rules that travel with the recording', () => {

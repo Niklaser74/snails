@@ -5,6 +5,7 @@ export function createFakeSupabase() {
   const users = new Map(); // token -> user id
   const accounts = new Map(); // user id -> { email, pendingEmail }
   const mails = []; // e-mails Supabase would have sent: { to, kind, uid }
+  const supportedRules = [2, 3]; // mirrors snails_rules on the server
   const matches = new Map();
   const turns = new Map(); // match id -> [turns]
   const events = [];
@@ -41,7 +42,9 @@ export function createFakeSupabase() {
   const myTeam = (m, uid) => (m.host === uid ? 0 : m.guest === uid ? 1 : null);
 
   const rpc = {
+    snails_supported_rules() { return supportedRules; },
     snails_create_match(uid, a) {
+      if (!supportedRules.includes(a.p_rules_version)) throw Object.assign(new Error(`rules version ${a.p_rules_version} is not supported`), { status: 400, body: { message: `rules version ${a.p_rules_version} is not supported` } });
       const s = { id: uuid(), host: uid, guest: null, names: { 0: a.p_name || 'Värd' }, best_of: a.p_best_of ?? 3, wins_host: 0, wins_guest: 0, match_no: 1, current_match: null, status: 'open', winner_user: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       series.set(s.id, s);
       const m = newMatch({ rules_version: a.p_rules_version, seed: a.p_seed, config: a.p_config, names: { ...s.names }, host: uid, series_id: s.id });

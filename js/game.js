@@ -6,7 +6,17 @@ import { dsin, dcos, dhypot, datan2 } from './dmath.js';
 
 // Bump when physics or rules change so old recordings are not replayed with
 // new rules.
-export const RULES_VERSION = 3; // 3: shell shove, snail hop, AI levels
+// ---------- rules versioning ----------
+// Every match (recording, Snigelpost row) carries the rules version it was
+// started with. The simulation can run every version in SUPPORTED_RULES, so a
+// rule change never breaks a match in progress; older versions are retired
+// after a sunset period (see docs/REGELVERSIONER.md).
+//   1: first Snigelpost rules
+//   2: crates, slime ball, salt rain, ammo
+//   3: shell shove, snail hop (weapons with since: 3)
+export const RULES_VERSION = 3;
+export const SUPPORTED_RULES = [2, 3];
+export function rulesSupported(v) { return SUPPORTED_RULES.includes(v); }
 // Fixed simulation step. The sim only ever advances by exactly this much.
 export const TICK = 1 / 60;
 
@@ -20,11 +30,13 @@ export const WEAPONS = [
   { id: 'slem', name: 'Slemklot', icon: '🟢', radius: 30, dmg: 40, fuse: 2, charge: true, speed: 700, sticky: true, ammo: 3 },
   { id: 'saltregn', name: 'Saltregn', icon: '🌧️', radius: 13, dmg: 12, drops: 5, wind: true, charge: false, contact: true, marker: true, ammo: 1 },
   // melee: shoves every snail right in front of you, hard. No terrain damage, unlimited.
-  { id: 'skalstot', name: 'Skalstöt', icon: '🐚', range: 34, dmg: 22, push: 380, lift: 230, charge: false, melee: true, ammo: Infinity },
+  { id: 'skalstot', name: 'Skalstöt', icon: '🐚', range: 34, dmg: 22, push: 380, lift: 230, charge: false, melee: true, ammo: Infinity, since: 3 },
   // teleport: aimed with the ground marker, the snail hops there and the turn ends
-  { id: 'snigelhopp', name: 'Snigelhopp', icon: '✨', charge: false, marker: true, teleport: true, ammo: 1 },
+  { id: 'snigelhopp', name: 'Snigelhopp', icon: '✨', charge: false, marker: true, teleport: true, ammo: 1, since: 3 },
 ];
 export const CRATE_WEAPONS = ['dynamit', 'slem', 'saltregn', 'snigelhopp'];
+// The weapons that exist in a rules version, in fixed order (the order is hashed).
+export function weaponsFor(version) { return WEAPONS.filter((w) => (w.since || 1) <= version); }
 
 // AI difficulty. Everything the AI does goes through the input snapshot and
 // its own rng, so a level only changes which inputs get recorded.
@@ -100,6 +112,11 @@ export class Game {
     this.style = config.style || 'cartoon';
     this.rules = normalizeRules(config);
     this.replay = opts.replay || null;
+    this.rulesVersion = this.replay ? this.replay.rulesVersion : (config.rulesVersion ?? RULES_VERSION);
+    if (!rulesSupported(this.rulesVersion)) throw new Error(`rules version ${this.rulesVersion} is not supported (${SUPPORTED_RULES.join(', ')})`);
+    this.weapons = weaponsFor(this.rulesVersion);
+    this.weaponIds = new Set(this.weapons.map((w) => w.id));
+    this.crateWeapons = CRATE_WEAPONS.filter((id) => this.weaponIds.has(id));
     // Snigelpost: replay the recorded ticks, then hand control to the local player.
     // liveAfter = first tick that is played live; localTeams = team indices this client controls.
     this.replayUntil = this.replay ? (opts.liveAfter ?? Infinity) : 0;
@@ -120,7 +137,7 @@ export class Game {
     this.frame = emptyInput(); // the snapshot the simulation reads this tick
     this.prevFire = false;
     this.recording = {
-      rulesVersion: RULES_VERSION,
+      rulesVersion: this.rulesVersion,
       seed: this.seed,
       teams: config.teams.map((t) => ({ name: t.name, color: t.color, ai: aiLevel(t.ai) })),
       snailsPerTeam: config.snailsPerTeam || 3,
@@ -151,7 +168,7 @@ export class Game {
   }
 
   static fromRecording(canvas, rec, hooks = {}, style = 'cartoon') {
-    if (rec.rulesVersion !== RULES_VERSION) throw new Error(`Inspelningen har regelversion ${rec.rulesVersion}, spelet har ${RULES_VERSION}`);
+    if (!rulesSupported(rec.rulesVersion)) throw new Error(`Inspelningen har regelversion ${rec.rulesVersion}, spelet stöder ${SUPPORTED_RULES.join(', ')}`);
     return new Game(canvas, { teams: rec.teams, snailsPerTeam: rec.snailsPerTeam, turnTime: rec.turnTime, suddenDeath: rec.suddenDeath, style }, hooks, { replay: rec });
   }
 
@@ -212,14 +229,14 @@ export class Game {
     const h = new Hasher();
     h.int(this.tickCount).int(this.turnCount).int(this.teamIndex).byte(PHASES.indexOf(this.phase) + 1);
     h.num(this.wind ?? 0).num(this.timer ?? 0).num(this.waterY).num(this.power ?? 0);
-    h.byte(this.charging ? 1 : 0).byte(this.hasFired ? 1 : 0).byte(WEAPONS.findIndex((w) => w.id === this.weaponId) + 1);
+    h.byte(this.charging ? 1 : 0).byte(this.hasFired ? 1 : 0).byte(this.weapons.findIndex((w) => w.id === this.weaponId) + 1);
     for (const s of this.snails) {
       h.num(s.x).num(s.y).num(s.vx).num(s.vy).int(s.hp).byte(s.alive ? 1 : 0).byte(s.facing + 2).num(s.aim).byte(s.airborne ? 1 : 0).num(s.walkAcc);
     }
     for (const p of this.projectiles) h.num(p.x).num(p.y).num(p.vx).num(p.vy).num(p.age).byte(p.rest ? 1 : 0);
     for (const c of this.crates) h.num(c.x).num(c.y).num(c.vy).byte(c.landed ? 1 : 0).byte(c.type === 'health' ? 1 : 2);
     h.num(this.markerX);
-    for (const t of this.teams) for (const w of WEAPONS) h.int(t.ammo[w.id] === Infinity ? -1 : t.ammo[w.id]);
+    for (const t of this.teams) for (const w of this.weapons) h.int(t.ammo[w.id] === Infinity ? -1 : t.ammo[w.id]);
     h.bytes(this.terrain.mask);
     return h.hex();
   }
@@ -229,7 +246,7 @@ export class Game {
     let ni = 0;
     this.teams = this.config.teams.map((t, ti) => ({
       index: ti, name: t.name, color: t.color, ai: aiLevel(t.ai), nextSnail: 0,
-      snails: [], ammo: Object.fromEntries(WEAPONS.map((w) => [w.id, w.ammo])),
+      snails: [], ammo: Object.fromEntries(this.weapons.map((w) => [w.id, w.ammo])),
     }));
     this.snails = [];
     const per = this.config.snailsPerTeam || 3;
@@ -313,7 +330,7 @@ export class Game {
   spawnCrate() {
     const type = this.rng() < 0.5 ? 'health' : 'weapon';
     const x = Math.round(60 + this.rng() * (this.W - 120));
-    const weapon = CRATE_WEAPONS[Math.floor(this.rng() * CRATE_WEAPONS.length)];
+    const weapon = this.crateWeapons[Math.floor(this.rng() * this.crateWeapons.length)];
     const c = { x, y: -20, vy: 0, type, weapon, landed: false, chute: true };
     this.crates.push(c);
     return c;
@@ -373,7 +390,7 @@ export class Game {
   // UI weapon choice. It becomes an input and is applied by the simulation.
   selectWeapon(id) {
     if (this.ai || this.replay) return;
-    if (WEAPON_BY_ID[id]) this.input.weapon = id;
+    if (this.weaponIds.has(id)) this.input.weapon = id;
   }
 
   // ---------- update ----------
@@ -450,7 +467,7 @@ export class Game {
     const team = this.teams[s.team];
     const aiming = this.phase === 'aim' && !this.hasFired;
     // the weapon choice is an input; apply it first so the rest of the tick sees it
-    if (aiming && !this.charging && inp.weapon !== this.weaponId && WEAPON_BY_ID[inp.weapon] && team.ammo[inp.weapon] > 0) {
+    if (aiming && !this.charging && inp.weapon !== this.weaponId && this.weaponIds.has(inp.weapon) && team.ammo[inp.weapon] > 0) {
       this.weaponId = inp.weapon;
       if (WEAPON_BY_ID[inp.weapon].marker) this.markerX = clamp(s.x + s.facing * 160, 20, this.W - 20);
     }
@@ -1041,7 +1058,7 @@ export class Game {
       ai.t = 0;
       // close-range options first
       const team = this.teams[s.team];
-      if (canTurn && dist < WEAPON_BY_ID.skalstot.range + 4 && Math.abs(tgt.y - s.y) < 30 && lvl.specials) {
+      if (canTurn && this.weaponIds.has('skalstot') && dist < WEAPON_BY_ID.skalstot.range + 4 && Math.abs(tgt.y - s.y) < 30 && lvl.specials) {
         ai.plan = { weapon: 'skalstot', facing: wantFacing, aim: s.aim, power: 1 };
         ai.state = 'aim'; return;
       }

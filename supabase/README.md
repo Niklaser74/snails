@@ -103,6 +103,11 @@ till projektets Site URL i stället. E-postmallarna (Authentication → Email
 Templates) delas med nissebus; texten i "Change Email Address" och "Magic Link"
 bör nämna båda apparna, eller hållas neutral.
 
+Regelversioner (`migrations/20260904230000_rules_versions.sql`): tabellen
+`snails_rules` säger vilka versioner som får skapa matcher och när en
+pensionerad version stängs (`sunset_at`). `snails_cleanup` avslutar då
+kvarvarande matcher som oavgjorda. Strategin finns i `docs/REGELVERSIONER.md`.
+
 Kända begränsningar:
 - Servern kör inte simuleringen själv; den litar på klientens hash. Motståndarens
   klient jämför sin egen hash med den sparade och varnar vid avvikelse.

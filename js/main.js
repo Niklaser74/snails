@@ -1,4 +1,4 @@
-import { Game, WEAPONS, TICK, RULES_VERSION, DEFAULT_RULES, TURN_TIMES, SUDDEN_DEATHS, normalizeRules } from './game.js';
+import { Game, WEAPONS, TICK, RULES_VERSION, rulesSupported, DEFAULT_RULES, TURN_TIMES, SUDDEN_DEATHS, normalizeRules } from './game.js';
 import { snigelpost } from './online.js';
 import { online } from './supa.js';
 import { push } from './push.js';
@@ -385,7 +385,7 @@ async function openMatch(id) {
   try {
     let m = await snigelpost.get(id);
     if (m.my_team == null) { await snigelpost.join(id, playerName()); m = await snigelpost.get(id); push.notify(id, 'joined'); }
-    if (m.rules_version !== RULES_VERSION) { status.textContent = t('online.rules'); return; }
+    if (!rulesSupported(m.rules_version)) { status.textContent = t(m.rules_version < RULES_VERSION ? 'online.rulesOld' : 'online.rulesNew'); return; }
     status.textContent = '';
     startOnlineGame(m);
   } catch (e) {
@@ -701,7 +701,7 @@ if (snigelpost.available()) {
 function buildWeaponBar() {
   const box = $('weapons');
   box.innerHTML = '';
-  WEAPONS.forEach((w, i) => {
+  (game ? game.weapons : WEAPONS).forEach((w, i) => {
     const b = document.createElement('button');
     b.dataset.id = w.id;
     b.innerHTML = `${w.icon}<small>${i + 1}</small><span class="ammo"></span>`;
@@ -724,14 +724,15 @@ addEventListener('keydown', (e) => {
   if (k) { if (!game.ai) game.input[k] = true; e.preventDefault(); }
   if (e.code === 'Escape') { toMenu(); return; }
   if (game.ai || game.replay) return;
-  if (/^Digit[1-8]$/.test(e.code)) game.selectWeapon(WEAPONS[+e.code[5] - 1].id);
+  if (/^Digit[1-9]$/.test(e.code) && game.weapons[+e.code[5] - 1]) game.selectWeapon(game.weapons[+e.code[5] - 1].id);
   if (e.code === 'Tab') {
     e.preventDefault();
     const ammo = game.active ? game.teams[game.active.team].ammo : {};
-    let i = WEAPONS.findIndex((w) => w.id === game.weaponId);
-    for (let k = 0; k < WEAPONS.length; k++) {
-      i = (i + 1) % WEAPONS.length;
-      if (ammo[WEAPONS[i].id] > 0) { game.selectWeapon(WEAPONS[i].id); break; }
+    const ws = game.weapons;
+    let i = ws.findIndex((w) => w.id === game.weaponId);
+    for (let k = 0; k < ws.length; k++) {
+      i = (i + 1) % ws.length;
+      if (ammo[ws[i].id] > 0) { game.selectWeapon(ws[i].id); break; }
     }
   }
 });

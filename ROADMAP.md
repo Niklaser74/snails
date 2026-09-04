@@ -90,12 +90,14 @@ Stripe när e-postkoppling finns, sedan säsongspass och belönad reklam.
    bättre ljud, slow motion vid dödsskott.~~ – klart 2026-09-04.
 3. ~~**De två sista vapnen och AI-nivåer** (lätt, normal, svår).~~ – klart 2026-09-04.
    Regelversionen höjdes till 3 (nya vapen ändrar hashen); databasen var tom, så
-   inga matcher gick förlorade. Punkt 6 nedan är fortfarande öppen.
+   inga matcher gick förlorade.
 4. ~~**E-postkoppling** av kontot, grunden för fas 3 och för att inte tappa
    spelare vid byte av telefon.~~ – klart 2026-09-04 (kräver Redirect URLs i
    Supabase, se `supabase/README.md`).
 5. **snails.se och Poki-inskick** när DNS:en är på plats.
-6. **Versionsstrategi för simuleringen** innan nästa regeländring.
+6. ~~**Versionsstrategi för simuleringen** innan nästa regeländring.~~ – klart
+   2026-09-04, se `docs/REGELVERSIONER.md`: spelet kör aktuell + föregående
+   version, facit-inspelningar i testerna, solnedgång på servern.
 
 Därefter fas 3, med "Dagens skott" först eftersom det är billigast och ger
 daglig återkomst utan att kräva kosmetik.
