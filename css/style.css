@@ -90,6 +90,8 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #5fb0ea; fon
 .mrow button.play { background: var(--accent); color: #fff; }
 .invite { display: flex; gap: 8px; margin: 8px 0 14px; flex-wrap: wrap; }
 .invite input { flex: 1; min-width: 200px; }
+.pushbox { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 0 0 14px; }
+.pushbox .hint { margin: 0; }
 .replaybar { position: absolute; top: calc(52px + var(--safe-t)); left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; background: rgba(255,250,240,.95); color: var(--ink); border-radius: 12px; padding: 6px 10px 6px 14px; font-weight: 700; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
 .notice { position: absolute; bottom: calc(110px + var(--safe-b)); left: 50%; transform: translateX(-50%); background: rgba(226,69,60,.92); color: #fff; padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 700; max-width: 80vw; text-align: center; }
 

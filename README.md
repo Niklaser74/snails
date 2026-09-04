@@ -62,9 +62,10 @@ ditt drag när du hinner. Varje drag lagras som inspelade indata i Supabase
 (`snails_matches`, `snails_turns`) och spelas upp exakt på motståndarens enhet
 tack vare den deterministiska simuleringen. Motståndarens senaste drag visas i
 tredubbel hastighet innan du får spela. Väntläget uppdateras automatiskt var
-åttonde sekund. Kräver att **anonym inloggning** är påslagen i Supabase-projektet
-(Authentication → Sign In / Providers → Anonymous). Push-notiser kommer i nästa
-steg.
+åttonde sekund, och med knappen "Meddela mig när det är min tur" får du en
+push-notis när motståndaren spelat, även när sidan är stängd (iPhone kräver att
+spelet är installerat på hemskärmen). Kräver att **anonym inloggning** är påslagen
+i Supabase-projektet (Authentication → Sign In / Providers → Anonymous).
 
 ## Deterministisk simulering
 

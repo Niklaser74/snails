@@ -50,6 +50,9 @@ const dict = {
     'online.play': 'Spela', 'online.show': 'Visa', 'online.delete': 'Ta bort', 'online.loading': 'Hämtar…',
     'online.disabled': 'Snigelpost är inte tillgängligt just nu (anonym inloggning måste vara påslagen).',
     'online.retry': 'Skicka igen', 'online.playTurn': 'Spela draget',
+    'online.pushBtn': 'Meddela mig när det är min tur', 'online.pushOn': 'Notiser är på för den här enheten.',
+    'online.pushIos': 'Notiser på iPhone och iPad kräver att spelet installeras: Dela → Lägg till på hemskärmen.',
+    'online.pushDenied': 'Notiser är blockerade i webbläsaren.', 'online.pushFail': 'Kunde inte slå på notiser.',
   },
   en: {
     'app.tagline': 'Turn-based artillery with giant African land snails. Slow. Shelled. Deadly.',
@@ -98,6 +101,9 @@ const dict = {
     'online.play': 'Play', 'online.show': 'Show', 'online.delete': 'Delete', 'online.loading': 'Loading…',
     'online.disabled': 'Snail Mail is not available right now (anonymous sign-in must be enabled).',
     'online.retry': 'Send again', 'online.playTurn': 'Play your turn',
+    'online.pushBtn': "Notify me when it's my turn", 'online.pushOn': 'Notifications are on for this device.',
+    'online.pushIos': 'On iPhone and iPad, notifications require installing the game: Share → Add to Home Screen.',
+    'online.pushDenied': 'Notifications are blocked in the browser.', 'online.pushFail': 'Could not turn on notifications.',
   },
 };
 

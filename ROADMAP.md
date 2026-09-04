@@ -41,8 +41,8 @@ Målet är att en match ska kännas bra att spela klart och vilja spelas igen.
 - ~~**Matcher.** Seed, regler och en logg av drag; motståndarens drag spelas upp
   som replay~~ – klart 2026-09-04 (`snails_matches`, `snails_turns`).
 - ~~**Inbjudan via länk.**~~ – klart 2026-09-04.
-- **Notiser.** Web Push när det är din tur. Det här är den viktigaste
-  återkomstmekanismen i hela spelet. Nästa steg.
+- ~~**Notiser.** Web Push när det är din tur~~ – klart 2026-09-04 (edge-funktionen
+  `notify-turn`, VAPID i Vault, knapp i väntläget).
 - **Åskådarläge.** Vem som helst med länken kan titta på replayen.
 - **Serversidig verifiering.** Edge function som spelar upp draget headless och
   jämför hash innan det godkänns.

@@ -1,5 +1,6 @@
 import { Game, WEAPONS, TICK, RULES_VERSION } from './game.js';
 import { snigelpost } from './online.js';
+import { push } from './push.js';
 import { SNAIL_STYLES, TEAM_COLORS } from './snails.js';
 import { unlockAudio } from './audio.js';
 import { LANGS, t, fmt, setLang, getLang, detectLang, applyDom } from './i18n.js';
@@ -311,7 +312,7 @@ async function openMatch(id) {
   status.textContent = t('online.loading');
   try {
     let m = await snigelpost.get(id);
-    if (m.my_team == null) { await snigelpost.join(id, playerName()); m = await snigelpost.get(id); }
+    if (m.my_team == null) { await snigelpost.join(id, playerName()); m = await snigelpost.get(id); push.notify(id, 'joined'); }
     if (m.rules_version !== RULES_VERSION) { status.textContent = t('online.rules'); return; }
     status.textContent = '';
     startOnlineGame(m);
@@ -398,6 +399,7 @@ async function submitTurn(finished, winnerTeam) {
     o.startTick = m.tick_count;
     o.pending = null;
     $('wait-status').textContent = t('online.sent');
+    push.notify(o.id, finished ? 'finished' : 'turn');
     track('match_end', { turns: g.turnCount, durationSec: 0, winner: finished ? (winnerTeam === o.myTeam ? 'human' : winnerTeam == null ? 'draw' : 'human') : 'pending', weapons: {}, online: true });
     renderWaiting();
     if (finished) setTimeout(() => showGameOverOnline(), 1500);
@@ -424,6 +426,7 @@ function renderWaiting() {
   const mine = isMyTurn(m) && !o.pending && game && game.tickCount <= o.startTick;
   $('btn-wait-play').hidden = !mine;
   $('btn-wait-refresh').hidden = mine;
+  renderPushBox(m);
   $('btn-wait-refresh').textContent = o.pending ? t('online.retry') : t('online.refresh');
   if (m.status === 'open') {
     $('wait-title').textContent = t('online.inviteTitle');
@@ -441,6 +444,32 @@ function renderWaiting() {
     invite.hidden = true;
   }
 }
+// "notify me" box in the waiting overlay
+let pushSub = undefined; // undefined = not checked yet
+async function renderPushBox(m) {
+  const box = $('wait-push'), btn = $('btn-push'), hint = $('push-hint');
+  const usable = push.supported() && platform.useServiceWorker && m.status !== 'finished';
+  box.hidden = !usable;
+  if (!usable) return;
+  if (pushSub === undefined) { pushSub = null; pushSub = await push.current(); }
+  if (push.needsInstall()) { btn.hidden = true; hint.textContent = t('online.pushIos'); return; }
+  if (push.permission() === 'denied') { btn.hidden = true; hint.textContent = t('online.pushDenied'); return; }
+  if (pushSub) { btn.hidden = true; hint.textContent = t('online.pushOn'); return; }
+  btn.hidden = false; hint.textContent = '';
+}
+$('btn-push').addEventListener('click', async () => {
+  const btn = $('btn-push');
+  btn.disabled = true;
+  try {
+    pushSub = await push.subscribe(getLang());
+    track('push_on', {});
+  } catch (e) {
+    $('push-hint').textContent = push.permission() === 'denied' ? t('online.pushDenied') : t('online.pushFail');
+  }
+  btn.disabled = false;
+  if (onlineMatch) renderPushBox(onlineMatch.match);
+});
+
 $('btn-copy').addEventListener('click', async () => {
   const link = $('wait-link').value;
   try { await navigator.clipboard.writeText(link); $('wait-status').textContent = t('online.copied'); }

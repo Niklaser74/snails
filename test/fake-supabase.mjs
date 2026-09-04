@@ -6,6 +6,8 @@ export function createFakeSupabase() {
   const matches = new Map();
   const turns = new Map(); // match id -> [turns]
   const events = [];
+  const pushes = []; // saved subscriptions
+  const notifies = []; // calls to the notify-turn function
   let seq = 0;
   const uuid = () => `00000000-0000-4000-8000-${String(++seq).padStart(12, '0')}`;
   const err = (message, status = 400) => ({ status, body: { message } });
@@ -48,6 +50,8 @@ export function createFakeSupabase() {
       m.updated_at = new Date().toISOString();
       return view(m, uid);
     },
+    snails_save_push(uid, a) { pushes.push({ uid, endpoint: a.p_endpoint, lang: a.p_lang }); return null; },
+    snails_remove_push(uid, a) { const i = pushes.findIndex((p) => p.endpoint === a.p_endpoint && p.uid === uid); if (i >= 0) pushes.splice(i, 1); return null; },
     snails_delete_match(uid, a) { const m = matches.get(a.p_match); if (m && (m.host === uid || m.guest === uid)) { matches.delete(m.id); turns.delete(m.id); } return null; },
   };
 
@@ -62,6 +66,12 @@ export function createFakeSupabase() {
         return json(200, { access_token: 'tok-' + id, refresh_token: 'ref-' + id, expires_in: 3600, user: { id } });
       }
       if (url.pathname === '/rest/v1/snails_events') { events.push(...JSON.parse(req.postData() || '[]')); return json(201, []); }
+      if (url.pathname === '/functions/v1/notify-turn') {
+        const token = (req.headers()['authorization'] || '').replace('Bearer ', '');
+        if (!users.get(token)) return json(401, { error: 'not signed in' });
+        notifies.push({ uid: users.get(token), ...JSON.parse(req.postData() || '{}') });
+        return json(200, { sent: 1 });
+      }
       if (url.pathname.startsWith('/rest/v1/rpc/')) {
         const name = url.pathname.split('/').pop();
         const token = (req.headers()['authorization'] || '').replace('Bearer ', '');
@@ -78,5 +88,5 @@ export function createFakeSupabase() {
     }
   }
 
-  return { handle, matches, turns, events, install: (page) => page.route('**/*.supabase.co/**', handle) };
+  return { handle, matches, turns, events, pushes, notifies, install: (page) => page.route('**/*.supabase.co/**', handle) };
 }

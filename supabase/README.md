@@ -64,3 +64,23 @@ Kända begränsningar i första versionen:
   klient jämför sin egen hash med den sparade och varnar vid avvikelse.
 - Ett anonymt konto lever i webbläsarens localStorage. Rensas den försvinner
   kontot och dess matcher. Koppling till e-post kommer senare.
+
+# Push-notiser
+
+Web Push utan tredjepartstjänst. Klienten (`js/push.js`) prenumererar via
+service workern och sparar prenumerationen med `snails_save_push`. Efter varje
+inskickat drag anropar klienten edge-funktionen `notify-turn`
+(`supabase/functions/notify-turn/`), som kontrollerar att anroparen är med i
+matchen och skickar en notis till motståndarens enheter. Kryptot (RFC 8291
+och VAPID) ligger i `webpush.js` och testas i `test/webpush.test.mjs`.
+
+- Publik VAPID-nyckel: `VAPID_PUBLIC_KEY` i `js/config.js`.
+- Privat VAPID-nyckel: Supabase Vault, hemligheten `snails_vapid_private`,
+  läsbar bara för `service_role` via `snails_vapid_private()`.
+- Döda prenumerationer (404/410 från push-tjänsten) tas bort automatiskt.
+- iPhone/iPad kräver att spelet är installerat på hemskärmen; spelet visar en
+  hjälptext i stället för knappen där.
+
+Ny nyckel vid behov: generera ett P-256-par, lägg den privata som JWK i Vault
+med samma namn och den publika i `js/config.js`. Alla befintliga
+prenumerationer måste då göras om.

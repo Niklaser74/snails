@@ -229,6 +229,14 @@ await test('Snigelpost: two players trade turns through the server', async () =>
     const page = await ctx.newPage();
     page.setDefaultTimeout(20000);
     await fake.install(page);
+    // stand-in for the browser's push service: no network, deterministic keys
+    await page.addInitScript(() => {
+      const sub = { endpoint: 'https://push.example.test/' + Math.random().toString(36).slice(2), toJSON() { return { endpoint: this.endpoint, keys: { p256dh: 'BPUBKEY', auth: 'AUTH' } }; } };
+      let current = null;
+      PushManager.prototype.getSubscription = async () => current;
+      PushManager.prototype.subscribe = async () => { current = sub; return sub; };
+      Object.defineProperty(Notification, 'permission', { get: () => 'granted' });
+    });
     page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
     page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
     await page.goto(base + url);
@@ -275,6 +283,16 @@ await test('Snigelpost: two players trade turns through the server', async () =>
   const m2 = fake.matches.get(matchId);
   assert.equal(m2.turn_count, 2);
   assert.equal(m2.turn_team, 0);
+  // B turns on notifications from the waiting overlay
+  await b.waitForSelector('#btn-push:not([hidden])');
+  await b.click('#btn-push');
+  await b.waitForFunction(() => document.getElementById('btn-push').hidden);
+  assert.equal(fake.pushes.length, 1, 'subscription not saved');
+  assert.match(fake.pushes[0].endpoint, /push\.example\.test/);
+  assert.match(await b.locator('#push-hint').textContent(), /on for this device|på för den här/);
+  // both turns asked the server to notify the other player, and the join did too
+  const kinds = fake.notifies.map((n) => n.event).sort();
+  assert.deepEqual(kinds, ['joined', 'turn', 'turn']);
   // A refreshes, gets B's turn shown, then plays on
   await a.click('#btn-wait-refresh');
   await a.waitForSelector('#replaybar:not([hidden])');
