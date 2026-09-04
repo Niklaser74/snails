@@ -54,6 +54,10 @@ const RING16 = Array.from({ length: 16 }, (_, a) => {
   return { x: dcos(ang), y: dsin(ang) };
 });
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+// camera punch timing in seconds: zoom in, hold, ease back out
+const PUNCH_IN = 0.18, PUNCH_HOLD = 0.9, PUNCH_OUT = 1.8;
+const easeOut = (k) => 1 - (1 - k) * (1 - k);
+const easeInOut = (k) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
 const lerp = (a, b, k) => a + (b - a) * k;
 
 export class Game {
@@ -669,6 +673,7 @@ export class Game {
   explosion(x, y, r, dmg, shooter, sizeMul = 1) {
     this.terrain.explode(x, y, r);
     this.shake = Math.min(20, r * 0.35);
+    if (r >= 20) this.cameraPunch(x, y, r);
     sfx.explode(sizeMul);
     // crates in the blast go off next tick
     for (let i = this.crates.length - 1; i >= 0; i--) {
@@ -728,19 +733,50 @@ export class Game {
     }
   }
 
+  // Camera "punch": zoom in quickly on an explosion, hold, then ease back out
+  // slowly. Called from explosion(); purely visual.
+  cameraPunch(x, y, r) {
+    const cam = this.cam;
+    if (!this.canvas || cam.manual) return;
+    if (!cam.punch) cam.punch = { base: cam.zoom, x, y, t: 0, amount: 0 };
+    else { cam.punch.x = x; cam.punch.y = y; cam.punch.t = Math.min(cam.punch.t, PUNCH_IN); }
+    cam.punch.amount = Math.max(cam.punch.amount, Math.min(0.7, 0.25 + r * 0.007));
+  }
+
   updateCamera(dt) {
     if (!this.canvas) return;
     const cam = this.cam;
     const cw = this.canvas.clientWidth, ch = this.canvas.clientHeight;
     const minZoom = Math.max(cw / this.W, ch / this.H);
+    let punchK = 0;
+    if (cam.punch) {
+      const p = cam.punch;
+      p.t += dt;
+      if (cam.manual || p.t > PUNCH_IN + PUNCH_HOLD + PUNCH_OUT) {
+        if (!cam.manual) cam.zoom = p.base;
+        cam.punch = null;
+      } else {
+        if (p.t < PUNCH_IN) punchK = easeOut(p.t / PUNCH_IN);
+        else if (p.t < PUNCH_IN + PUNCH_HOLD) punchK = 1;
+        else punchK = 1 - easeInOut((p.t - PUNCH_IN - PUNCH_HOLD) / PUNCH_OUT);
+        cam.zoom = p.base * (1 + p.amount * punchK);
+      }
+    }
     cam.zoom = clamp(cam.zoom, minZoom, 3);
     if (!cam.manual) {
       let tgt = cam.target;
       if (this.projectiles.length) tgt = this.projectiles[this.projectiles.length - 1];
       else if (this.phase === 'aim' && this.active && !this.hasFired && WEAPON_BY_ID[this.weaponId].marker) tgt = { x: this.markerX, y: this.active.y - 80 };
       else if (this.phase === 'aim' || this.phase === 'retreat') tgt = this.active;
-      if (tgt) {
-        const k = 1 - Math.pow(0.02, dt);
+      if (cam.punch && punchK > 0) {
+        // while zoomed in, look at the explosion instead of the next target
+        const t2 = tgt ? { x: lerp(tgt.x, cam.punch.x, punchK), y: lerp(tgt.y - 40, cam.punch.y, punchK) } : { x: cam.punch.x, y: cam.punch.y };
+        const k = 1 - Math.pow(0.001, dt);
+        cam.x = lerp(cam.x, t2.x, k);
+        cam.y = lerp(cam.y, t2.y, k);
+      } else if (tgt) {
+        // slower glide back after a punch, snappier otherwise
+        const k = 1 - Math.pow(cam.punch ? 0.1 : 0.02, dt);
         cam.x = lerp(cam.x, tgt.x, k);
         cam.y = lerp(cam.y, tgt.y - 40, k);
       }

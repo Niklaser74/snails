@@ -335,6 +335,7 @@ canvas.addEventListener('pointermove', (e) => {
     cam.zoom *= d / camDrag.pinch;
     camDrag.pinch = d;
     cam.manual = true;
+    cam.punch = null;
   } else if (camDrag.active) {
     const dx = e.clientX - camDrag.lx, dy = e.clientY - camDrag.ly;
     if (Math.abs(dx) + Math.abs(dy) > 2) cam.manual = true;
@@ -350,6 +351,7 @@ canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   game.cam.zoom *= e.deltaY < 0 ? 1.1 : 0.9;
   game.cam.manual = true;
+  game.cam.punch = null;
 }, { passive: false });
 
 // ---------- HUD ----------

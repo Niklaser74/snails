@@ -85,7 +85,23 @@ await test('keyboard: walk, aim, pick grenade, charge and fire', async () => {
   assert.ok(charging.charging && charging.power > 0.3, 'was charging');
   assert.equal(after.phase, 'retreat');
   assert.deepEqual(after.proj, ['granat']);
-  await ticks(page, 60 * 6);
+  // camera punch: zoomed in right after the blast, back to normal a few seconds later
+  const base = await page.evaluate(() => __game.cam.zoom);
+  let peak = 0;
+  for (let i = 0; i < 60 * 4; i += 5) {
+    await ticks(page, 5);
+    const z = await page.evaluate(() => __game.cam.zoom);
+    peak = Math.max(peak, z);
+    if (peak > base * 1.15) break;
+  }
+  assert.ok(peak > base * 1.15, `camera did not zoom in on the explosion (peak ${peak}, base ${base})`);
+  await ticks(page, 30);
+  const stillIn = await page.evaluate(() => __game.cam.zoom);
+  assert.ok(stillIn > base * 1.1, 'camera zoomed out too soon');
+  await ticks(page, 60 * 3);
+  const back = await page.evaluate(() => __game.cam.zoom);
+  assert.ok(Math.abs(back - base) < 0.01, `camera did not ease back (now ${back}, base ${base})`);
+  await ticks(page, 60 * 2);
   await page.screenshot({ path: path.join(outDir, 'after-shot.png') });
   const later = await page.evaluate(() => ({ turn: __game.turnCount, proj: __game.projectiles.length }));
   assert.equal(later.proj, 0, 'grenade exploded');
