@@ -48,6 +48,9 @@ sätts i `js/main.js` (`settings.style`).
   menyn. All UI-text ligger i `js/i18n.js`; spelmotorn skickar meddelandenycklar.
 - Guide: en fyrstegsguide visas i första matchen (gå, sikta, skjut, reträtt) och kan
   visas igen från hjälpdialogen.
+- Mätning: ett fåtal anonyma händelser (app-öppning, matchstart/slut, guide) räknas i
+  Supabase. Inga namn, inga IP-adresser, av på localhost och vid Do Not Track.
+  Se `supabase/README.md`.
 - Tangentbord: ← → / A D gå, ↑ ↓ / W S sikta, mellanslag ladda+skjut, Enter hoppa,
   1–6 / Tab vapen, Esc meny. Touch: knappar på skärmen, dra för att panorera, nyp för zoom.
 

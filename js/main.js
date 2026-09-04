@@ -2,6 +2,7 @@ import { Game, WEAPONS, TICK } from './game.js';
 import { SNAIL_STYLES, TEAM_COLORS } from './snails.js';
 import { unlockAudio } from './audio.js';
 import { LANGS, t, fmt, setLang, getLang, detectLang, applyDom } from './i18n.js';
+import { initAnalytics, track, setAnalyticsLang } from './analytics.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -78,9 +79,19 @@ function applyLanguage() {
 langSel.addEventListener('change', () => {
   settings.lang = langSel.value;
   setLang(settings.lang);
+  setAnalyticsLang(settings.lang);
   saveSettings(settings);
   applyLanguage();
 });
+
+// ---------- usage counter (see supabase/README.md) ----------
+initAnalytics(getLang());
+track('app_open', {
+  installed: matchMedia('(display-mode: standalone)').matches || navigator.standalone === true,
+  touch: matchMedia('(pointer: coarse)').matches,
+  w: innerWidth, h: innerHeight,
+});
+let matchStats = null; // { t0, weapons } for the running match
 
 // ---------- menu ----------
 $('opt-teams').value = settings.teams;
@@ -130,15 +141,26 @@ function startGame() {
   // ?seed=1234 gives a reproducible map and match (used by tests and for sharing)
   const seedParam = new URLSearchParams(location.search).get('seed');
   if (seedParam !== null && seedParam !== '') cfg.seed = Number(seedParam) | 0;
+  if (game && game.phase !== 'over') reportAbandon();
+  matchStats = { t0: Date.now(), weapons: {} };
   game = new Game(canvas, cfg, {
     onGameOver: (winner) => {
+      track('match_end', {
+        turns: game.turnCount,
+        durationSec: Math.round((Date.now() - matchStats.t0) / 1000),
+        winner: winner ? (winner.ai ? 'ai' : 'human') : 'draw',
+        weapons: matchStats.weapons,
+      });
+      matchStats = null;
       setTimeout(() => {
         $('go-title').textContent = winner ? t('go.win', { name: winner.name }) : t('go.draw');
         gameover.hidden = false;
       }, 2000);
     },
     onTurn: () => { camDrag.active = false; },
+    onFire: (g) => { if (matchStats) matchStats.weapons[g.weaponId] = (matchStats.weapons[g.weaponId] || 0) + 1; },
   });
+  track('match_start', { teams: cfg.teams.length, per: cfg.snailsPerTeam, humans: cfg.teams.filter((tm) => !tm.ai).length, style: cfg.style });
   window.__game = game;
   buildWeaponBar();
   menu.hidden = true;
@@ -150,7 +172,14 @@ function startGame() {
   tryFullscreen();
 }
 
+function reportAbandon() {
+  if (!game || !matchStats) return;
+  track('match_abandon', { turns: game.turnCount, durationSec: Math.round((Date.now() - matchStats.t0) / 1000) });
+  matchStats = null;
+}
+
 function toMenu() {
+  if (game && game.phase !== 'over') reportAbandon();
   gameover.hidden = true;
   hud.hidden = true;
   menu.hidden = false;
@@ -179,8 +208,12 @@ function startTutorial() {
   tutorial = { step: 1, x0: null, aim0: null, snail: null, turnAt4: null };
   renderTutorial();
 }
-function endTutorial(done) {
-  if (done) { settings.tutorialDone = true; saveSettings(settings); }
+function endTutorial(done, how = 'done') {
+  if (done) {
+    settings.tutorialDone = true;
+    saveSettings(settings);
+    track(how === 'skip' ? 'tutorial_skip' : 'tutorial_done', { step: tutorial?.step ?? 0 });
+  }
   tutorial = null;
   $('tutorial').hidden = true;
 }
@@ -191,7 +224,7 @@ function renderTutorial() {
   $('tut-text').textContent = t('tut.' + tutorial.step);
   $('tut-skip').textContent = tutorial.step === 4 ? t('tut.done') : t('tut.skip');
 }
-$('tut-skip').addEventListener('click', () => endTutorial(true));
+$('tut-skip').addEventListener('click', () => endTutorial(true, tutorial?.step === 4 ? 'done' : 'skip'));
 function updateTutorial() {
   if (!tutorial || !game) return;
   const s = game.active;
