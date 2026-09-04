@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { Game } from '../js/game.js';
+import { createFakeSupabase } from './fake-supabase.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = path.join(root, 'test-results');
@@ -31,6 +32,8 @@ const base = `http://localhost:${server.address().port}`;
 
 const launchOpts = process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {};
 const browser = await chromium.launch(launchOpts);
+// every page talks to an in-memory Supabase so tests are offline and deterministic
+const fake = createFakeSupabase();
 let failed = 0;
 
 async function test(name, fn) {
@@ -43,6 +46,7 @@ async function test(name, fn) {
 async function open(url, viewport = { width: 1280, height: 720 }, extra = {}) {
   const page = await browser.newPage({ viewport, ...extra });
   page.setDefaultTimeout(20000);
+  await fake.install(page);
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
@@ -214,6 +218,78 @@ await test('first-match guide advances as the player walks, aims and fires', asy
   assert.equal((await step()).hidden, true);
   assert.deepEqual(errors, []);
   await page.close();
+});
+
+await test('Snigelpost: two players trade turns through the server', async () => {
+  // both browsers get their own anonymous user (separate contexts, separate storage)
+  const ctxA = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const ctxB = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const errors = [];
+  const setup = async (ctx, url) => {
+    const page = await ctx.newPage();
+    page.setDefaultTimeout(20000);
+    await fake.install(page);
+    page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+    page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+    await page.goto(base + url);
+    await page.evaluate(() => { window.__manualTick = true; });
+    return page;
+  };
+  const shoot = async (page) => {
+    await page.keyboard.down('ArrowUp'); await ticks(page, 10); await page.keyboard.up('ArrowUp');
+    await page.keyboard.down('Space'); await ticks(page, 25); await page.keyboard.up('Space');
+    for (let i = 0; i < 400; i++) { await ticks(page, 10); if (await page.evaluate(() => __game.paused || __game.phase === 'over')) break; }
+    await page.waitForTimeout(150);
+  };
+  // A creates a match and sees the invite link before playing turn 1
+  const a = await setup(ctxA, '/');
+  await a.waitForSelector('#online:not([hidden])');
+  await a.fill('#opt-name', 'Anna');
+  await a.click('#btn-online-create');
+  await a.waitForSelector('#waiting:not([hidden])');
+  const link = await a.inputValue('#wait-link');
+  assert.match(link, /\?match=/, 'no invite link');
+  assert.equal(await a.locator('#btn-wait-play').isHidden(), false, 'host should be offered to play turn 1');
+  await a.click('#btn-wait-play');
+  await shoot(a);
+  await a.waitForFunction(() => document.getElementById('wait-status').textContent.length > 0 && !document.getElementById('waiting').hidden);
+  const afterA = await a.evaluate(() => ({ status: document.getElementById('wait-status').textContent, paused: __game.paused, hash: __game.stateHash() }));
+  assert.ok(afterA.paused, 'host game not paused after its turn');
+  const matchId = new URL(link).searchParams.get('match');
+  const m1 = fake.matches.get(matchId);
+  assert.equal(m1.turn_count, 1, 'turn 1 not stored');
+  assert.equal(m1.last_hash, afterA.hash);
+  // B opens the link: joins, watches A's turn, plays turn 2
+  const b = await setup(ctxB, '/?match=' + matchId);
+  await b.waitForFunction(() => window.__game);
+  await b.waitForSelector('#replaybar:not([hidden])');
+  await b.click('#btn-skip-replay');
+  const bState = await b.evaluate(() => ({ hash: __game.stateHash(), tick: __game.tickCount, team: __game.active.team, paused: __game.paused, waiting: document.getElementById('waiting').hidden }));
+  assert.equal(bState.hash, m1.last_hash, 'guest did not reproduce the host turn');
+  assert.equal(bState.team, 1);
+  assert.equal(bState.paused, false);
+  assert.equal(bState.waiting, true, 'guest should be playing, not waiting');
+  assert.equal(fake.matches.get(matchId).status, 'playing');
+  await shoot(b);
+  await b.waitForFunction(() => !document.getElementById('waiting').hidden && /skickat|sent/i.test(document.getElementById('wait-status').textContent));
+  const m2 = fake.matches.get(matchId);
+  assert.equal(m2.turn_count, 2);
+  assert.equal(m2.turn_team, 0);
+  // A refreshes, gets B's turn shown, then plays on
+  await a.click('#btn-wait-refresh');
+  await a.waitForSelector('#replaybar:not([hidden])');
+  await a.click('#btn-skip-replay');
+  const aState = await a.evaluate(() => ({ hash: __game.stateHash(), team: __game.active.team, paused: __game.paused, waiting: document.getElementById('waiting').hidden }));
+  assert.equal(aState.hash, m2.last_hash, 'host did not reproduce the guest turn');
+  assert.equal(aState.team, 0);
+  assert.equal(aState.paused, false);
+  assert.equal(aState.waiting, true);
+  // the match list in the menu shows the game with the right state
+  await a.click('#btn-menu');
+  await a.waitForSelector('.mrow');
+  assert.match(await a.locator('.mrow .mname').first().textContent(), /Gäst|B|…|Snail|Snäcka/);
+  assert.deepEqual(errors, []);
+  await ctxA.close(); await ctxB.close();
 });
 
 await test('service worker registers and manifest is valid', async () => {

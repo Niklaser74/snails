@@ -1,4 +1,5 @@
-import { Game, WEAPONS, TICK } from './game.js';
+import { Game, WEAPONS, TICK, RULES_VERSION } from './game.js';
+import { snigelpost } from './online.js';
 import { SNAIL_STYLES, TEAM_COLORS } from './snails.js';
 import { unlockAudio } from './audio.js';
 import { LANGS, t, fmt, setLang, getLang, detectLang, applyDom } from './i18n.js';
@@ -19,6 +20,10 @@ let game = null;
 let lastTs = 0;
 let hudLast = 0;
 let tutorial = null; // active first-match guide, see startTutorial()
+let onlineMatch = null; // Snigelpost: { id, myTeam, startTick, match, pending }
+let replayUntil = 0; // >0 while the opponent's turn is being shown at speed
+let pollTimer = null;
+const waiting = $('waiting');
 
 // ---------- settings ----------
 function loadSettings() {
@@ -194,12 +199,19 @@ function reportAbandon() {
 }
 
 function toMenu() {
-  if (game && game.phase !== 'over') { reportAbandon(); platform.gameplayStop(); }
+  if (game && game.phase !== 'over' && !onlineMatch) { reportAbandon(); platform.gameplayStop(); }
+  stopPolling();
+  onlineMatch = null;
+  replayUntil = 0;
+  $('replaybar').hidden = true;
+  waiting.hidden = true;
+  $('btn-again').hidden = false;
   gameover.hidden = true;
   hud.hidden = true;
   menu.hidden = false;
   game = null;
   window.__game = null;
+  refreshMatchList();
 }
 $('btn-start').addEventListener('click', startGame);
 $('btn-help').addEventListener('click', () => (help.hidden = false));
@@ -252,6 +264,221 @@ function updateTutorial() {
   else if (tutorial.step === 3 && game.hasFired) { tutorial.step = 4; tutorial.turnAt4 = game.turnCount; }
   else if (tutorial.step === 4 && game.turnCount > tutorial.turnAt4 && game.phase === 'aim') { endTutorial(true); return; }
   if (tutorial.step !== before || box.hidden) { box.hidden = false; renderTutorial(); }
+}
+
+// ---------- Snigelpost ----------
+function playerName() { return (settings.playerName || '').trim() || t('online.defaultName'); }
+function notice(text, ms = 6000) {
+  const el = $('notice');
+  el.textContent = text; el.hidden = false;
+  clearTimeout(notice.timer);
+  notice.timer = setTimeout(() => { el.hidden = true; }, ms);
+}
+function matchLabel(m) {
+  const opp = m.names?.[m.my_team === 0 ? '1' : '0'];
+  if (m.status === 'finished') return m.winner == null ? t('online.draw') : m.winner === m.my_team ? t('online.won') : t('online.lost');
+  if (m.status === 'open' && m.my_team === 0) return t('online.open');
+  return m.turn_team === m.my_team ? t('online.yourTurn') : t('online.theirTurn', { name: opp || '…' });
+}
+async function refreshMatchList() {
+  if (!snigelpost.available()) return;
+  const box = $('online-list');
+  const status = $('online-status');
+  try {
+    const list = await snigelpost.list();
+    box.innerHTML = '';
+    if (!list.length) { status.textContent = t('online.none'); return; }
+    status.textContent = '';
+    for (const m of list) {
+      const opp = m.names?.[m.my_team === 0 ? '1' : '0'];
+      const mine = m.status !== 'finished' && m.turn_team === m.my_team && !(m.status === 'open' && m.turn_count >= 1);
+      const row = document.createElement('div');
+      row.className = 'mrow' + (mine ? ' turn' : '');
+      row.innerHTML = `<div><div class="mname">${escapeHtml(t('online.vs', { name: opp || '…' }))}</div><div class="mstate">${escapeHtml(matchLabel(m))}</div></div>
+        <button class="${mine ? 'play' : ''}">${mine ? t('online.play') : t('online.show')}</button><button class="del" title="${t('online.delete')}">✕</button>`;
+      row.querySelector('button').addEventListener('click', () => openMatch(m.id));
+      row.querySelector('.del').addEventListener('click', async () => { await snigelpost.remove(m.id).catch(() => {}); refreshMatchList(); });
+      box.appendChild(row);
+    }
+  } catch (e) {
+    status.textContent = /anonymous|signup|sign-in|disabled/i.test(e.message) ? t('online.disabled') : t('online.error', { msg: e.message });
+  }
+}
+const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+async function openMatch(id) {
+  const status = $('online-status');
+  status.textContent = t('online.loading');
+  try {
+    let m = await snigelpost.get(id);
+    if (m.my_team == null) { await snigelpost.join(id, playerName()); m = await snigelpost.get(id); }
+    if (m.rules_version !== RULES_VERSION) { status.textContent = t('online.rules'); return; }
+    status.textContent = '';
+    startOnlineGame(m);
+  } catch (e) {
+    status.textContent = /anonymous|signup|sign-in|disabled/i.test(e.message) ? t('online.disabled') : t('online.error', { msg: e.message });
+  }
+}
+
+function isMyTurn(m) {
+  return m.status !== 'finished' && m.turn_team === m.my_team && !(m.status === 'open' && m.turn_count >= 1);
+}
+
+function startOnlineGame(m) {
+  unlockAudio();
+  stopPolling();
+  matchStats = null;
+  const hooks = {
+    onWaitTurn: (g) => {
+      if (!onlineMatch) return;
+      if (g.tickCount <= onlineMatch.startTick) { showWaiting(); return; } // nothing new was played on this device
+      submitTurn(false, null);
+    },
+    onGameOver: (winner) => {
+      if (!onlineMatch) return;
+      if (game.tickCount > onlineMatch.startTick) submitTurn(true, winner ? winner.index : null);
+      else setTimeout(() => showGameOverOnline(), 1500);
+    },
+    onTurn: () => { camDrag.active = false; },
+  };
+  const { game: g, myTeam, replayFrom } = snigelpost.buildGame(canvas, m, hooks, settings.style);
+  onlineMatch = { id: m.id, myTeam, startTick: m.tick_count, match: m, pending: null };
+  game = g;
+  window.__game = g;
+  buildWeaponBar();
+  menu.hidden = true; gameover.hidden = true; waiting.hidden = true; help.hidden = true;
+  hud.hidden = false;
+  $('btn-again').hidden = true;
+  lastTs = performance.now(); acc = 0;
+  endTutorial(false);
+  const mine = isMyTurn(m);
+  // fast-forward silently to the part worth watching
+  const showFrom = mine ? replayFrom : m.tick_count;
+  while (g.tickCount < showFrom && !g.paused && g.phase !== 'over') g.tick();
+  if (mine && replayFrom < m.tick_count) { replayUntil = m.tick_count; $('replaybar').hidden = false; }
+  else { replayUntil = 0; afterReplay(); }
+  if (m.status === 'open' && m.turn_count === 0) showWaiting(); // show the invite link before the first turn
+  track('match_start', { teams: 2, per: m.config.snailsPerTeam, humans: 2, style: settings.style, online: true });
+}
+
+function afterReplay() {
+  $('replaybar').hidden = true;
+  replayUntil = 0;
+  const o = onlineMatch;
+  if (!o) return;
+  const m = o.match, g = game;
+  if (g.tickCount >= m.tick_count && m.last_hash && g.stateHash() !== m.last_hash) notice(t('online.desync'), 9000);
+  if (m.status === 'finished') { showGameOverOnline(); return; }
+  if (!isMyTurn(m)) showWaiting();
+}
+$('btn-skip-replay').addEventListener('click', () => {
+  if (!replayUntil || !game) return;
+  while (game.tickCount < replayUntil && !game.paused) game.tick();
+  afterReplay();
+});
+
+function showGameOverOnline() {
+  const m = onlineMatch?.match;
+  if (!m) return;
+  $('go-title').textContent = m.winner == null ? t('online.draw') : m.winner === m.my_team ? t('online.won') : t('online.lost');
+  $('btn-again').hidden = true;
+  waiting.hidden = true;
+  gameover.hidden = false;
+}
+
+async function submitTurn(finished, winnerTeam) {
+  const o = onlineMatch, g = game;
+  if (!o || !g) return;
+  o.pending = { finished, winnerTeam };
+  showWaiting();
+  $('wait-status').textContent = t('online.sending');
+  try {
+    const m = await snigelpost.submit(o.match, g, o.startTick, finished, winnerTeam);
+    o.match = { ...o.match, ...m, turns: undefined };
+    o.startTick = m.tick_count;
+    o.pending = null;
+    $('wait-status').textContent = t('online.sent');
+    track('match_end', { turns: g.turnCount, durationSec: 0, winner: finished ? (winnerTeam === o.myTeam ? 'human' : winnerTeam == null ? 'draw' : 'human') : 'pending', weapons: {}, online: true });
+    renderWaiting();
+    if (finished) setTimeout(() => showGameOverOnline(), 1500);
+  } catch (e) {
+    $('wait-status').textContent = t('online.error', { msg: e.message });
+    $('btn-wait-refresh').textContent = t('online.retry');
+  }
+}
+
+function showWaiting() {
+  if (!onlineMatch) return;
+  waiting.hidden = false;
+  renderWaiting();
+  startPolling();
+}
+function renderWaiting() {
+  const o = onlineMatch;
+  if (!o) return;
+  const m = o.match;
+  const opp = m.names?.[o.myTeam === 0 ? '1' : '0'];
+  const invite = $('wait-invite');
+  const mine = isMyTurn(m) && !o.pending && game && game.tickCount <= o.startTick;
+  $('btn-wait-play').hidden = !mine;
+  $('btn-wait-refresh').hidden = mine;
+  $('btn-wait-refresh').textContent = o.pending ? t('online.retry') : t('online.refresh');
+  if (m.status === 'open') {
+    $('wait-title').textContent = t('online.inviteTitle');
+    $('wait-text').textContent = t('online.inviteText');
+    invite.hidden = false;
+    $('wait-link').value = snigelpost.inviteLink(m.id);
+    $('btn-share').hidden = !navigator.share;
+  } else if (m.status === 'finished') {
+    $('wait-title').textContent = t('online.finished');
+    $('wait-text').textContent = matchLabel(m);
+    invite.hidden = true;
+  } else {
+    $('wait-title').textContent = t('online.theirTurn', { name: opp || '…' });
+    $('wait-text').textContent = t('online.waitText', { name: opp || '…' });
+    invite.hidden = true;
+  }
+}
+$('btn-copy').addEventListener('click', async () => {
+  const link = $('wait-link').value;
+  try { await navigator.clipboard.writeText(link); $('wait-status').textContent = t('online.copied'); }
+  catch { $('wait-link').select(); }
+});
+$('btn-share').addEventListener('click', () => navigator.share?.({ title: 'Snäckmageddon', url: $('wait-link').value }).catch(() => {}));
+$('btn-wait-refresh').addEventListener('click', () => { if (onlineMatch?.pending) submitTurn(onlineMatch.pending.finished, onlineMatch.pending.winnerTeam); else pollMatch(true); });
+$('btn-wait-menu').addEventListener('click', () => toMenu());
+$('btn-wait-play').addEventListener('click', () => { waiting.hidden = true; stopPolling(); });
+
+function startPolling() { stopPolling(); pollTimer = setInterval(() => pollMatch(false), 8000); }
+function stopPolling() { if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
+async function pollMatch(manual) {
+  const o = onlineMatch;
+  if (!o || waiting.hidden || o.pending) return;
+  try {
+    const m = await snigelpost.get(o.id);
+    if (m.turn_count > o.match.turn_count || m.status !== o.match.status || (m.guest && !o.match.guest)) {
+      stopPolling();
+      startOnlineGame(m);
+    } else if (manual) $('wait-status').textContent = matchLabel(m);
+  } catch (e) { if (manual) $('wait-status').textContent = t('online.error', { msg: e.message }); }
+}
+addEventListener('visibilitychange', () => { if (!document.hidden) pollMatch(false); });
+
+if (snigelpost.available()) {
+  $('online').hidden = false;
+  $('opt-name').value = settings.playerName || '';
+  $('opt-name').addEventListener('change', () => { settings.playerName = $('opt-name').value.trim().slice(0, 24); saveSettings(settings); });
+  $('btn-online-create').addEventListener('click', async () => {
+    const b = $('btn-online-create');
+    b.disabled = true;
+    settings.playerName = $('opt-name').value.trim().slice(0, 24); saveSettings(settings);
+    try { const m = await snigelpost.create(+$('opt-per').value, playerName()); await openMatch(m.id); }
+    catch (e) { $('online-status').textContent = /anonymous|signup|sign-in|disabled/i.test(e.message) ? t('online.disabled') : t('online.error', { msg: e.message }); }
+    b.disabled = false;
+  });
+  refreshMatchList();
+  const joinId = new URLSearchParams(location.search).get('match');
+  if (joinId) openMatch(joinId);
 }
 
 // ---------- weapons bar ----------
@@ -403,7 +630,12 @@ function frame(ts) {
   lastTs = ts;
   let n = 0;
   // window.__manualTick lets tests drive game.tick() themselves
-  if (!window.__manualTick) {
+  if (replayUntil) {
+    // showing the opponent's turn at triple speed
+    for (let i = 0; i < 3 && game.tickCount < replayUntil; i++) game.tick();
+    acc = 0;
+    if (game.tickCount >= replayUntil) afterReplay();
+  } else if (!window.__manualTick) {
     while (acc >= TICK && n < 6) { game.tick(); acc -= TICK; n++; }
     if (n === 6) acc = 0; // tab was hidden or the device is too slow: drop time instead of spiralling
   }

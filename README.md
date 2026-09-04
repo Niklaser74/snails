@@ -54,6 +54,17 @@ sätts i `js/main.js` (`settings.style`).
 - Tangentbord: ← → / A D gå, ↑ ↓ / W S sikta, mellanslag ladda+skjut, Enter hoppa,
   1–6 / Tab vapen, Esc meny. Touch: knappar på skärmen, dra för att panorera, nyp för zoom.
 
+## Snigelpost (asynkront multiplayer)
+
+Spela mot en kompis i egen takt: skapa en match i menyn, skicka länken, spela
+ditt drag när du hinner. Varje drag lagras som inspelade indata i Supabase
+(`snails_matches`, `snails_turns`) och spelas upp exakt på motståndarens enhet
+tack vare den deterministiska simuleringen. Motståndarens senaste drag visas i
+tredubbel hastighet innan du får spela. Väntläget uppdateras automatiskt var
+åttonde sekund. Kräver att **anonym inloggning** är påslagen i Supabase-projektet
+(Authentication → Sign In / Providers → Anonymous). Push-notiser kommer i nästa
+steg.
+
 ## Deterministisk simulering
 
 Simuleringen går i fasta steg om 1/60 s, all slump är seedad och all matte i
@@ -102,6 +113,10 @@ js/audio.js           syntetiserade ljudeffekter
 js/rng.js             seedad slump, shuffle, tillståndshash
 js/dmath.js           motoroberoende sin/cos/atan2
 js/i18n.js            ordlista svenska/engelska
+js/supa.js            Supabase-klient (anonym auth, RPC) utan bibliotek
+js/online.js          Snigelpost: matcher, drag, replay
+js/analytics.js       mätning
+js/platform.js        web / itch.io / Poki
 js/analytics.js       anonym räknare (Supabase)
 js/platform.js        plattformsadapter (web, itch.io, Poki)
 scripts/build-itch.mjs paketering för itch.io

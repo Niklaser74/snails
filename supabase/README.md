@@ -36,3 +36,25 @@ bara lägga till rader, aldrig läsa, ändra eller ta bort (RLS).
 1. Kör `supabase/migrations/20260904120000_events.sql` i projektet (SQL Editor
    eller `supabase db push`).
 2. Fyll i `SUPABASE_URL` och `SUPABASE_KEY` (publishable key) i `js/config.js`.
+
+# Snigelpost
+
+Tabellerna `snails_matches` och `snails_turns` samt RPC-funktionerna
+`snails_create_match`, `snails_join_match`, `snails_get_match`,
+`snails_my_matches`, `snails_submit_turn` och `snails_delete_match` ligger i
+`migrations/20260904150000_snigelpost.sql`. Klienten når bara funktionerna,
+aldrig tabellerna. Funktionerna kontrollerar att anroparen är med i matchen,
+att det är dennes tur, att dragnumret och startticken stämmer, och att en
+match bara kan anslutas en gång.
+
+Spelarna är anonyma Supabase Auth-användare. **Slå på anonym inloggning**:
+Authentication → Sign In / Providers → Anonymous → "Allow anonymous sign-ins".
+Utan det får menyn texten "Snigelpost är inte tillgängligt just nu".
+
+Kända begränsningar i första versionen:
+- Ingen notis när det blir din tur. Väntläget pollar var åttonde sekund så länge
+  sidan är öppen. Web Push är nästa steg.
+- Servern kör inte simuleringen själv; den litar på klientens hash. Motståndarens
+  klient jämför sin egen hash med den sparade och varnar vid avvikelse.
+- Ett anonymt konto lever i webbläsarens localStorage. Rensas den försvinner
+  kontot och dess matcher. Koppling till e-post kommer senare.

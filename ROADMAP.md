@@ -35,15 +35,17 @@ Målet är att en match ska kännas bra att spela klart och vilja spelas igen.
 
 ## Fas 2 – Snigelpost, asynkront multiplayer (4–6 veckor)
 
-- **Deterministisk simulering** (görs först, se Tekniska beslut nedan).
-- **Konton.** Anonymt konto vid första start, uppgradera med e-post (magic
-  link) när man vill spela mot andra. Supabase Auth.
-- **Matcher.** Tabell `matches` med seed, regler och en logg av drag (indata
-  per tick). Klienten spelar upp motståndarens drag som en replay.
-- **Inbjudan via länk.** "Skicka länken till en kompis" är hela onboardingen.
+- ~~**Deterministisk simulering**~~ – klart 2026-09-04.
+- ~~**Konton.** Anonymt konto vid första start~~ – klart 2026-09-04. Kvar:
+  uppgradera med e-post (magic link) så kontot överlever ett byte av enhet.
+- ~~**Matcher.** Seed, regler och en logg av drag; motståndarens drag spelas upp
+  som replay~~ – klart 2026-09-04 (`snails_matches`, `snails_turns`).
+- ~~**Inbjudan via länk.**~~ – klart 2026-09-04.
 - **Notiser.** Web Push när det är din tur. Det här är den viktigaste
-  återkomstmekanismen i hela spelet.
+  återkomstmekanismen i hela spelet. Nästa steg.
 - **Åskådarläge.** Vem som helst med länken kan titta på replayen.
+- **Serversidig verifiering.** Edge function som spelar upp draget headless och
+  jämför hash innan det godkänns.
 
 ## Fas 3 – Progression och identitet (3–4 veckor)
 

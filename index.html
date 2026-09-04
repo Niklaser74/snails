@@ -33,6 +33,11 @@
   </div>
   <div id="hud-teams" class="hud-teams"></div>
   <div id="weapons" class="weapons"></div>
+  <div id="replaybar" class="replaybar" hidden>
+    <span data-i18n="online.replaying">Motståndarens drag</span>
+    <button id="btn-skip-replay" class="tut-btn" data-i18n="online.skip">Hoppa över</button>
+  </div>
+  <div id="notice" class="notice" hidden></div>
   <div id="tutorial" class="tutorial" hidden>
     <div class="tut-head"><span id="tut-step"></span><button id="tut-skip" class="tut-btn"></button></div>
     <div id="tut-text" class="tut-text"></div>
@@ -69,6 +74,36 @@
       <button id="btn-install" class="secondary" data-i18n="menu.install" hidden>Installera app</button>
     </div>
     <p class="hint" id="offline-hint"></p>
+
+    <section id="online" class="online" hidden>
+      <h2 data-i18n="online.title">Snigelpost</h2>
+      <p class="blurb" data-i18n="online.blurb">Spela mot en kompis i egen takt. Skapa en match, skicka länken, spela ditt drag när du hinner.</p>
+      <div class="row">
+        <label><span data-i18n="online.name">Ditt namn</span> <input type="text" id="opt-name" maxlength="24"></label>
+        <button id="btn-online-create" class="primary" data-i18n="online.create">Skapa match</button>
+      </div>
+      <div id="online-list" class="online-list"></div>
+      <p class="hint" id="online-status"></p>
+    </section>
+  </div>
+</div>
+
+<!-- WAITING (Snigelpost) -->
+<div id="waiting" class="overlay" hidden>
+  <div class="panel">
+    <h2 id="wait-title"></h2>
+    <p id="wait-text"></p>
+    <div id="wait-invite" class="invite" hidden>
+      <input id="wait-link" type="text" readonly>
+      <button id="btn-copy" class="secondary" data-i18n="online.copy">Kopiera länk</button>
+      <button id="btn-share" class="secondary" data-i18n="online.share" hidden>Dela</button>
+    </div>
+    <div class="actions">
+      <button id="btn-wait-play" class="primary" data-i18n="online.playTurn" hidden>Spela draget</button>
+      <button id="btn-wait-refresh" class="primary" data-i18n="online.refresh">Uppdatera</button>
+      <button id="btn-wait-menu" class="secondary" data-i18n="go.menu">Till menyn</button>
+    </div>
+    <p class="hint" id="wait-status"></p>
   </div>
 </div>
 

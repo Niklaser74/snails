@@ -181,5 +181,63 @@ test('salt rain: marker moves with left/right and five crystals fall and burst',
   assert.equal(g.teams[s.team].ammo.saltregn, 0);
 });
 
+test('a snail drowned by sudden death ends the turn and the match at once', () => {
+  const c = cfg(77);
+  c.teams[0].ai = false; c.snailsPerTeam = 1;
+  const g = new Game(null, c);
+  // put the active snail on the water line; the next tick drowns it
+  const s = g.active;
+  s.y = g.waterY + 10;
+  g.tick();
+  assert.equal(s.alive, false, 'snail should have drowned');
+  assert.notEqual(g.phase, 'aim', 'turn kept running with a dead active snail');
+  for (let i = 0; i < 60 * 3 && g.phase !== 'over'; i++) g.tick();
+  assert.equal(g.phase, 'over', 'match did not end within 3 s');
+  assert.equal(g.winner.index, 1, 'the other team should win');
+});
+
+test('Snigelpost: a turn played on one device resumes exactly on the other', () => {
+  const cfg = { seed: 555, snailsPerTeam: 2, teams: [{ name: 'A', color: '#e2453c', ai: false }, { name: 'B', color: '#3b82f6', ai: false }] };
+  const shoot = (g) => {
+    g.input.up = true; for (let i = 0; i < 10; i++) g.tick(); g.input.up = false;
+    g.input.fire = true; for (let i = 0; i < 25; i++) g.tick(); g.input.fire = false;
+    for (let i = 0; i < 60 * 40 && !g.paused && g.phase !== 'over'; i++) g.tick();
+  };
+  // device A (host) plays turn 1 and pauses when it becomes B's turn
+  const waits = [];
+  const a = new Game(null, cfg, { onWaitTurn: (g, team) => waits.push({ team, tick: g.tickCount, hash: g.stateHash() }) }, { localTeams: [0] });
+  assert.equal(a.paused, false);
+  shoot(a);
+  assert.equal(a.paused, true, 'host did not pause at the turn boundary');
+  assert.equal(waits.length, 1); assert.equal(waits[0].team, 1);
+  // the hook sees the finished tick: same tick count and hash as afterwards
+  assert.equal(waits[0].tick, a.tickCount);
+  assert.equal(waits[0].hash, a.stateHash());
+  const turn1 = { start: 0, end: a.tickCount, inputs: a.inputsSince(0), hash: a.stateHash() };
+  assert.ok(turn1.inputs.length > 2 && turn1.inputs.every(([t]) => t < turn1.end));
+  // device B (guest): replay turn 1, verify, play turn 2
+  const rec1 = { rulesVersion: 2, seed: 555, teams: cfg.teams, snailsPerTeam: 2, inputs: turn1.inputs };
+  const b = new Game(null, cfg, {}, { replay: rec1, liveAfter: turn1.end, localTeams: [1] });
+  while (b.tickCount < turn1.end) b.tick();
+  assert.equal(b.stateHash(), turn1.hash, 'guest state differs after replaying the host turn');
+  assert.equal(b.paused, false, 'guest paused on its own turn');
+  assert.equal(b.active.team, 1);
+  shoot(b);
+  assert.equal(b.paused, true);
+  const turn2 = { start: turn1.end, end: b.tickCount, inputs: b.inputsSince(turn1.end), hash: b.stateHash() };
+  assert.ok(turn2.inputs.every(([t]) => t >= turn2.start && t < turn2.end), 'turn 2 inputs outside its tick range');
+  // device A again: replay both turns, must land on B's hash with A to play
+  const rec2 = { ...rec1, inputs: [...turn1.inputs, ...turn2.inputs] };
+  const a2 = new Game(null, cfg, {}, { replay: rec2, liveAfter: turn2.end, localTeams: [0] });
+  while (a2.tickCount < turn2.end) a2.tick();
+  assert.equal(a2.stateHash(), turn2.hash, 'host state differs after replaying both turns');
+  assert.equal(a2.paused, false);
+  assert.equal(a2.active.team, 0);
+  // and it keeps recording from there
+  shoot(a2);
+  assert.ok(a2.inputsSince(turn2.end).length > 0);
+  assert.ok(a2.paused || a2.phase === 'over');
+});
+
 if (failed) { console.log(`\n${failed} test(s) failed`); process.exit(1); }
 console.log('\nall tests passed');

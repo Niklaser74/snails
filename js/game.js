@@ -74,6 +74,13 @@ export class Game {
     this.H = 800;
     this.style = config.style || 'cartoon';
     this.replay = opts.replay || null;
+    // Snigelpost: replay the recorded ticks, then hand control to the local player.
+    // liveAfter = first tick that is played live; localTeams = team indices this client controls.
+    this.replayUntil = this.replay ? (opts.liveAfter ?? Infinity) : 0;
+    this.localTeams = opts.localTeams || null;
+    this.paused = false;
+    this.waitingFor = null; // team index whose turn it is on another device
+    this.deferred = []; // hooks fired after the current tick has fully completed
     this.seed = (this.replay ? this.replay.seed : (config.seed ?? (Math.random() * 1e9))) | 0;
     this.rng = mulberry32(this.seed); // simulation only
     this.airng = mulberry32(this.seed ^ 0x2545f491); // AI decisions (recorded as inputs, never touches the sim rng)
@@ -95,6 +102,7 @@ export class Game {
     };
     this.lastRecorded = null;
     this.replayIdx = 0;
+    if (this.replay && this.replayUntil !== Infinity) this.recording.inputs = this.replay.inputs.map(([t, f]) => [t, { ...f }]);
     this.projectiles = [];
     this.crates = [];
     this.pendingBooms = [];
@@ -122,6 +130,12 @@ export class Game {
   // One simulation step. Every input passes through here, so a match can be
   // recorded as (tick, input) pairs and replayed bit for bit.
   tick() {
+    if (this.paused) return;
+    if (this.replay && this.tickCount >= this.replayUntil) {
+      // end of the recorded part: from here on this device plays live
+      this.lastRecorded = { ...this.frame };
+      this.replay = null;
+    }
     if (this.replay) {
       this.frame = this.replayInputAt(this.tickCount);
     } else {
@@ -131,12 +145,26 @@ export class Game {
     }
     this.update(TICK);
     this.tickCount++;
+    // hooks that need the finished tick (state hash, tick count) run here
+    const fns = this.deferred;
+    this.deferred = [];
+    for (const fn of fns) fn();
   }
 
   record(frame) {
     if (this.lastRecorded && sameInput(this.lastRecorded, frame)) return;
     this.recording.inputs.push([this.tickCount, { ...frame }]);
     this.lastRecorded = { ...frame };
+  }
+
+  // The recorded inputs from a tick onwards (one turn, for Snigelpost).
+  inputsSince(tick) {
+    return this.recording.inputs.filter(([t]) => t >= tick).map(([t, f]) => [t, { ...f }]);
+  }
+
+  // Is the current turn played on this device?
+  isLocalTurn() {
+    return !this.localTeams || !this.active || this.localTeams.includes(this.active.team);
   }
 
   replayInputAt(tick) {
@@ -231,6 +259,12 @@ export class Game {
     this.ai = team.ai && !this.replay ? { state: 'think', t: 0, plan: null, walkT: 0, tries: 0 } : null;
     Object.assign(this.input, emptyInput());
     this.prevFire = false;
+    // Snigelpost: the other player's turn is played on their device
+    if (this.localTeams && !this.localTeams.includes(ti) && this.tickCount >= this.replayUntil - 1) {
+      this.paused = true;
+      this.waitingFor = ti;
+      this.deferred.push(() => this.hooks.onWaitTurn?.(this, ti));
+    }
     this.cam.manual = false;
     this.cam.target = s;
     if (this.turnCount > SUDDEN_DEATH_TURN) {
@@ -300,7 +334,7 @@ export class Game {
     this.winner = winner || null;
     this.say(winner ? { key: 'msg.win', name: winner.name } : { key: 'msg.draw' }, 99);
     sfx.win();
-    this.hooks.onGameOver?.(winner);
+    this.deferred.push(() => this.hooks.onGameOver?.(winner));
   }
 
   // Messages are { key, ...params } objects; the UI translates them (js/i18n.js).
@@ -332,6 +366,12 @@ export class Game {
     }
 
     for (const s of this.snails) this.updateSnail(s, dt);
+    // the active snail died mid-turn (rising water, fall, own blast): end the turn now
+    if ((this.phase === 'aim' || this.phase === 'retreat') && this.active && !this.active.alive) {
+      this.charging = false;
+      this.phase = 'settle';
+      this.settleTimer = 0;
+    }
     this.updateProjectiles(dt);
     this.updateCrates(dt);
     for (const s of this.snails) if (s.alive) this.checkCrates(s);
