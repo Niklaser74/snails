@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Game, RULES_VERSION, SUPPORTED_RULES, weaponsFor } from '../js/game.js';
+import { dailyConfig, seedFor, weaponFor, dayKey } from '../js/daily.js';
 
 const cfg = (seed) => ({
   seed,
@@ -346,6 +347,42 @@ test('current rules version has a fixture and unsupported versions are refused',
   assert.equal(old.teams[0].ammo.skalstot, undefined);
   old.input.weapon = 'skalstot'; old.tick();
   assert.equal(old.weaponId, 'bazooka', 'a v3 weapon must not exist in a v2 match');
+});
+
+test('shot of the day: same map for everyone, one shot, score is the damage, replayable', () => {
+  assert.equal(seedFor('2026-09-05'), seedFor('2026-09-05'));
+  assert.notEqual(seedFor('2026-09-05'), seedFor('2026-09-06'));
+  assert.notEqual(weaponFor('2026-09-05'), weaponFor('2026-09-06'));
+  assert.match(dayKey(new Date('2026-09-05T23:59:00Z')), /^2026-09-05$/);
+  const names = { me: 'Du', targets: 'Mål' };
+  const g = new Game(null, dailyConfig('2026-09-05', 'cartoon', names));
+  assert.equal(g.stateHash(), new Game(null, dailyConfig('2026-09-05', 'cartoon', names)).stateHash());
+  assert.deepEqual(g.snails.map((s) => s.team), [0, 1, 1, 1], 'one shooter, three targets');
+  assert.equal(g.weaponId, weaponFor('2026-09-05'));
+  const ammo = g.teams[0].ammo;
+  assert.equal(ammo[g.weaponId], 1);
+  assert.ok(Object.entries(ammo).every(([id, n]) => id === g.weaponId || n === 0), 'only the weapon of the day has ammo');
+  // no shot within the turn: the day is over with 0 points
+  const idle = new Game(null, dailyConfig('2026-09-05', 'cartoon', names));
+  for (let i = 0; i < 60 * 50 && idle.phase !== 'over'; i++) idle.tick();
+  assert.equal(idle.phase, 'over'); assert.equal(idle.daily.score, 0);
+  assert.equal(idle.turnCount, 1, 'the targets must never get a turn');
+  // a direct hit on a target: damage becomes points, a kill counts 150
+  const hit = new Game(null, dailyConfig('2026-09-05', 'cartoon', names));
+  const target = hit.teams[1].snails[0];
+  target.hp = 30;
+  hit.explosion(target.x, target.y - 10, 36, 48, null);
+  hit.input.fire = true; hit.tick(); hit.input.fire = false; // the shot itself may or may not hit; the kill is already pending
+  for (let i = 0; i < 60 * 60 && hit.phase !== 'over'; i++) hit.tick();
+  assert.equal(hit.phase, 'over');
+  assert.ok(hit.daily.score >= 150, `expected at least the kill, got ${hit.daily.score}`);
+  assert.equal(hit.recording.mode, 'daily');
+  assert.deepEqual(hit.recording.teamSizes, [1, 3]);
+  // the recording replays to the same score (the server keeps it for verification)
+  const rep = Game.fromRecording(null, JSON.parse(JSON.stringify(idle.recording)));
+  while (rep.tickCount < idle.tickCount) rep.tick();
+  assert.equal(rep.daily.score, idle.daily.score);
+  assert.equal(rep.stateHash(), idle.stateHash());
 });
 
 test('turn time and sudden death are match rules that travel with the recording', () => {

@@ -116,6 +116,10 @@ export class Game {
     if (!rulesSupported(this.rulesVersion)) throw new Error(`rules version ${this.rulesVersion} is not supported (${SUPPORTED_RULES.join(', ')})`);
     this.weapons = weaponsFor(this.rulesVersion);
     this.weaponIds = new Set(this.weapons.map((w) => w.id));
+    // Shot of the day: one snail, one weapon, one shot at a row of targets. The
+    // match ends when the shot has settled; the score is the damage done.
+    const src = this.replay || config;
+    this.daily = src.mode === 'daily' ? { weapon: this.weaponIds.has(src.dailyWeapon) ? src.dailyWeapon : 'bazooka', score: null } : null;
     this.crateWeapons = CRATE_WEAPONS.filter((id) => this.weaponIds.has(id));
     // Snigelpost: replay the recorded ticks, then hand control to the local player.
     // liveAfter = first tick that is played live; localTeams = team indices this client controls.
@@ -143,6 +147,9 @@ export class Game {
       snailsPerTeam: config.snailsPerTeam || 3,
       turnTime: this.rules.turnTime,
       suddenDeath: this.rules.suddenDeath,
+      teamSizes: config.teamSizes || undefined,
+      mode: this.daily ? 'daily' : undefined,
+      dailyWeapon: this.daily ? this.daily.weapon : undefined,
       inputs: [],
     };
     this.lastRecorded = null;
@@ -169,7 +176,7 @@ export class Game {
 
   static fromRecording(canvas, rec, hooks = {}, style = 'cartoon') {
     if (!rulesSupported(rec.rulesVersion)) throw new Error(`Inspelningen har regelversion ${rec.rulesVersion}, spelet stöder ${SUPPORTED_RULES.join(', ')}`);
-    return new Game(canvas, { teams: rec.teams, snailsPerTeam: rec.snailsPerTeam, turnTime: rec.turnTime, suddenDeath: rec.suddenDeath, style }, hooks, { replay: rec });
+    return new Game(canvas, { teams: rec.teams, snailsPerTeam: rec.snailsPerTeam, teamSizes: rec.teamSizes, turnTime: rec.turnTime, suddenDeath: rec.suddenDeath, mode: rec.mode, dailyWeapon: rec.dailyWeapon, style }, hooks, { replay: rec });
   }
 
   // ---------- fixed-step driver ----------
@@ -248,16 +255,19 @@ export class Game {
       index: ti, name: t.name, color: t.color, ai: aiLevel(t.ai), nextSnail: 0,
       snails: [], ammo: Object.fromEntries(this.weapons.map((w) => [w.id, w.ammo])),
     }));
+    if (this.daily) for (const t of this.teams) for (const w of this.weapons) t.ammo[w.id] = w.id === this.daily.weapon ? 1 : 0;
     this.snails = [];
     const per = this.config.snailsPerTeam || 3;
-    const total = this.teams.length * per;
+    const sizes = this.config.teamSizes || this.teams.map(() => per); // uneven teams (shot of the day)
+    const total = sizes.reduce((a, b) => a + b, 0);
     // spread spawn columns across the map, shuffled, then alternate teams
     const slots = [];
     for (let i = 0; i < total; i++) slots.push(((i + 0.5) / total) * (this.W - 160) + 80);
     shuffle(slots, this.rng);
     let si = 0;
-    for (let k = 0; k < per; k++) {
+    for (let k = 0; k < Math.max(...sizes); k++) {
       for (const team of this.teams) {
+        if (k >= sizes[team.index]) continue;
         const x = Math.round(slots[si++] + (this.rng() - 0.5) * 30);
         const gy = this.terrain.groundBelow(x, 0);
         const s = {
@@ -271,13 +281,14 @@ export class Game {
       }
     }
     this.teamIndex = -1;
-    this.weaponId = 'bazooka';
+    this.weaponId = this.daily ? this.daily.weapon : 'bazooka';
   }
 
   // ---------- turns ----------
   livingTeams() { return this.teams.filter((t) => t.snails.some((s) => s.alive)); }
 
   startTurn() {
+    if (this.daily && this.turnCount >= 1) { this.dailyOver(); return; }
     const living = this.livingTeams();
     if (living.length <= 1) { this.gameOver(living[0]); return; }
     let ti = this.teamIndex;
@@ -301,7 +312,7 @@ export class Game {
     this.power = 0;
     this.charging = false;
     this.hasFired = false;
-    this.weaponId = 'bazooka';
+    this.weaponId = this.daily ? this.daily.weapon : 'bazooka';
     this.ai = team.ai && !this.replay ? { state: 'think', t: 0, plan: null, walkT: 0, tries: 0, level: AI_LEVELS[team.ai] } : null;
     Object.assign(this.input, emptyInput());
     this.prevFire = false;
@@ -375,11 +386,23 @@ export class Game {
     }
   }
 
+  // Shot of the day is over: damage to the targets is the score, a cracked shell counts extra.
+  dailyScore() {
+    let score = 0;
+    for (const s of this.teams[1].snails) score += s.alive ? 100 - s.hp : 150;
+    return score;
+  }
+  dailyOver() {
+    this.daily.score = this.dailyScore();
+    this.gameOver(this.daily.score > 0 ? this.teams[0] : null);
+  }
+
   gameOver(winner) {
     this.phase = 'over';
     this.active = null;
     this.winner = winner || null;
-    this.say(winner ? { key: 'msg.win', name: winner.name } : { key: 'msg.draw' }, 99);
+    if (this.daily) this.say({ key: 'msg.daily', score: this.daily.score }, 99);
+    else this.say(winner ? { key: 'msg.win', name: winner.name } : { key: 'msg.draw' }, 99);
     sfx.win();
     this.deferred.push(() => this.hooks.onGameOver?.(winner));
   }
@@ -1490,7 +1513,7 @@ export class Game {
       power: this.power,
       charging: this.charging,
       message: this.messageTimer > 0 ? this.message : null,
-      teams: this.teams.map((t) => ({ name: t.name, color: t.color, hp: t.snails.reduce((a, s) => a + (s.alive ? s.hp : 0), 0), alive: t.snails.filter((s) => s.alive).length })),
+      teams: this.teams.map((t) => ({ name: t.name, color: t.color, hp: t.snails.reduce((a, s) => a + (s.alive ? s.hp : 0), 0), alive: t.snails.filter((s) => s.alive).length, total: t.snails.length })),
       ai: this.ai && this.active ? this.teams[this.active.team].ai : false,
       turn: this.turnCount,
       ammo: this.active ? this.teams[this.active.team].ammo : null,

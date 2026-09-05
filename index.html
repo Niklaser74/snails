@@ -94,6 +94,17 @@
     </div>
     <p class="hint" id="offline-hint"></p>
 
+    <section id="daily" class="daily">
+      <h2><span data-i18n="daily.title">Dagens skott</span> <span id="daily-day" class="daily-day"></span></h2>
+      <p class="blurb" id="daily-blurb"></p>
+      <div class="actions">
+        <button id="btn-daily" class="primary" data-i18n="daily.play">Spela dagens skott</button>
+        <span id="daily-me" class="hint"></span>
+      </div>
+      <ol id="daily-board" class="board"></ol>
+      <p class="hint" id="daily-status"></p>
+    </section>
+
     <section id="online" class="online" hidden>
       <h2 data-i18n="online.title">Snigelpost</h2>
       <p class="blurb" data-i18n="online.blurb">Spela mot en kompis i egen takt. Skapa en match, skicka länken, spela ditt drag när du hinner.</p>
@@ -173,6 +184,7 @@
   <div class="panel">
     <h2 id="go-title" data-i18n="go.title">Matchen är slut</h2>
     <p id="go-series" class="series" hidden></p>
+    <p id="go-daily" class="hint" hidden></p>
     <div class="actions">
       <button id="btn-again" class="primary" data-i18n="go.again">Spela igen</button>
       <button id="btn-go-next" class="primary" data-i18n="online.next" hidden>Nästa match</button>

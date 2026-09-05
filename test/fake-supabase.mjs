@@ -6,6 +6,7 @@ export function createFakeSupabase() {
   const accounts = new Map(); // user id -> { email, pendingEmail }
   const mails = []; // e-mails Supabase would have sent: { to, kind, uid }
   const supportedRules = [2, 3]; // mirrors snails_rules on the server
+  const dailyRows = new Map(); // `${day}/${uid}` -> row
   const matches = new Map();
   const turns = new Map(); // match id -> [turns]
   const events = [];
@@ -43,6 +44,23 @@ export function createFakeSupabase() {
 
   const rpc = {
     snails_supported_rules() { return supportedRules; },
+    snails_daily_submit(uid, a) {
+      if (!supportedRules.includes(a.p_rules_version)) throw new Error('rules version not supported');
+      if (a.p_score < 0 || a.p_score > 450) throw new Error('score out of range');
+      const k = `${a.p_day}/${uid}`;
+      const cur = dailyRows.get(k);
+      const now = Date.now();
+      if (!cur) dailyRows.set(k, { day: a.p_day, uid, name: a.p_name || 'Snäcka', score: a.p_score, weapon: a.p_weapon, recording: a.p_recording, attempts: 1, updated: now });
+      else { cur.attempts++; cur.name = a.p_name || cur.name; if (a.p_score > cur.score) { cur.score = a.p_score; cur.recording = a.p_recording; cur.updated = now; } }
+      const row = dailyRows.get(k);
+      const rows = [...dailyRows.values()].filter((r) => r.day === a.p_day).sort((x, y) => y.score - x.score || x.updated - y.updated);
+      return { score: a.p_score, best: row.score, attempts: row.attempts, rank: rows.indexOf(row) + 1, total: rows.length, improved: row.score === a.p_score };
+    },
+    snails_daily_board(uid, a) {
+      const rows = [...dailyRows.values()].filter((r) => r.day === a.p_day).sort((x, y) => y.score - x.score || x.updated - y.updated);
+      const mine = rows.find((r) => r.uid === uid);
+      return { day: a.p_day, total: rows.length, top: rows.slice(0, 10).map((r) => ({ name: r.name, score: r.score, me: r.uid === uid })), me: mine ? { score: mine.score, attempts: mine.attempts, rank: rows.indexOf(mine) + 1 } : null };
+    },
     snails_create_match(uid, a) {
       if (!supportedRules.includes(a.p_rules_version)) throw Object.assign(new Error(`rules version ${a.p_rules_version} is not supported`), { status: 400, body: { message: `rules version ${a.p_rules_version} is not supported` } });
       const s = { id: uuid(), host: uid, guest: null, names: { 0: a.p_name || 'Värd' }, best_of: a.p_best_of ?? 3, wins_host: 0, wins_guest: 0, match_no: 1, current_match: null, status: 'open', winner_user: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
@@ -201,5 +219,5 @@ export function createFakeSupabase() {
     const tok = 'tok-' + mail.uid + '-' + (++seq); users.set(tok, mail.uid);
     return `#access_token=${tok}&refresh_token=ref-${mail.uid}&expires_in=3600&token_type=bearer&type=${mail.kind}`;
   }
-  return { handle, matches, turns, series, events, pushes, notifies, accounts, mails, clickMail, install: (page) => page.route('**/*.supabase.co/**', handle) };
+  return { handle, matches, turns, series, events, pushes, notifies, accounts, mails, clickMail, dailyRows, install: (page) => page.route('**/*.supabase.co/**', handle) };
 }

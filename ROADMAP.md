@@ -38,9 +38,12 @@ att göra det hållbart, roligare och till slut lönsamt.
 | Väntläge med automatisk uppdatering, ge upp, revansch, vinst efter tystnad, städjobb | |
 | Serier: bäst av 1/3/5 (standard 3), förläng en färdig match till en serie | |
 
-### Fas 3 – Progression och identitet (ej påbörjad)
-Profil, kosmetik (intäktsytan), "Dagens skott" med topplista, rank och säsonger.
-Förutsätter e-postkoppling, annars försvinner köp när webbläsardata rensas.
+### Fas 3 – Progression och identitet
+| Klart | Kvar |
+|---|---|
+| Dagens skott: samma bana och vapen för alla per dag, ett skott, topplista, bästa försöket räknas | Profil och kosmetik (intäktsytan) |
+| E-postkoppling (fas 2) som grund | Rank och säsonger |
+| | Serversidig verifiering av dagens skott (inspelningen sparas redan) |
 
 ### Fas 4 – Distribution
 | Klart | Kvar |
@@ -99,8 +102,9 @@ Stripe när e-postkoppling finns, sedan säsongspass och belönad reklam.
    2026-09-04, se `docs/REGELVERSIONER.md`: spelet kör aktuell + föregående
    version, facit-inspelningar i testerna, solnedgång på servern.
 
-Därefter fas 3, med "Dagens skott" först eftersom det är billigast och ger
-daglig återkomst utan att kräva kosmetik.
+~~Därefter fas 3, med "Dagens skott" först eftersom det är billigast och ger
+daglig återkomst utan att kräva kosmetik.~~ Dagens skott klart 2026-09-05.
+Nästa: profil och kosmetik, sedan rank och säsonger.
 
 ## Risker
 

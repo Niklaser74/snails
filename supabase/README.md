@@ -81,6 +81,19 @@ bli bäst av 5). `snails_rematch` startar en ny serie med samma längd, eller
 returnerar den pågående seriens aktuella match. `snails_get_match` returnerar
 `series` med ställning sett från anroparen.
 
+# Dagens skott
+
+Tabellen `snails_daily` (`migrations/20260905000000_daily.sql`) har en rad per
+spelare och UTC-dag: bästa poäng, antal försök, vapen, regelversion och
+inspelningen av det bästa skottet. `snails_daily_submit` tar emot ett försök
+(bara dagens eller gårdagens datum, poäng 0–450, stödd regelversion) och
+behåller det bästa; `snails_daily_board` ger topp tio och anroparens egen
+placering. Rader äldre än 60 dagar städas.
+
+Banan, vapnet och målen kommer ur datumet (`js/daily.js`), så alla spelar
+samma skott. Servern litar på klientens poäng men sparar inspelningen, så en
+edge-funktion kan senare spela upp den och kontrollera poängen.
+
 # E-postkoppling av kontot
 
 Ett anonymt konto kan kopplas till en e-postadress i menyn (Snigelpost →

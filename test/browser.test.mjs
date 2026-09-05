@@ -477,6 +477,46 @@ await test('account: link an e-mail, then sign in with a login link on another d
   await ctxA.close(); await ctxB.close();
 });
 
+await test('shot of the day: play, get a score, see it on the leaderboard', async () => {
+  const { page, errors } = await open('/?day=2026-09-05');
+  await page.waitForFunction(() => document.getElementById('daily-day').textContent === '2026-09-05');
+  await page.waitForFunction(() => /Nobody has taken|Ingen har skjutit/.test(document.getElementById('daily-status').textContent));
+  assert.match(await page.locator('#daily-blurb').textContent(), /grenade|granat/i);
+  await page.fill('#opt-name', 'Anna');
+  await page.click('#btn-daily');
+  await page.waitForFunction(() => window.__game && __game.daily);
+  await page.evaluate(() => { window.__manualTick = true; });
+  assert.equal(await page.evaluate(() => __game.weaponId), 'granat');
+  assert.equal(await page.locator('#weapons button:not([disabled])').count(), 1, 'only the weapon of the day is selectable');
+  // make sure the shot counts: weaken a target and blow it up, then fire
+  await page.evaluate(() => { const t = __game.teams[1].snails[0]; t.hp = 20; __game.explosion(t.x, t.y - 10, 36, 48, null); });
+  await page.keyboard.down('Space'); await ticks(page, 20); await page.keyboard.up('Space');
+  await page.evaluate(() => { for (let i = 0; i < 60 * 60 && __game.phase !== 'over'; i++) __game.tick(); });
+  await page.waitForSelector('#gameover:not([hidden])');
+  const score = await page.evaluate(() => __game.daily.score);
+  assert.ok(score >= 150, `score ${score}`);
+  assert.match(await page.locator('#go-title').textContent(), new RegExp(`${score} (points|poäng)`));
+  await page.waitForFunction(() => /Rank 1 of 1|Plats 1 av 1/.test(document.getElementById('go-daily').textContent));
+  assert.match(await page.locator('#go-daily').textContent(), /New best|Nytt dagsbästa/);
+  assert.equal(await page.locator('#btn-again').textContent(), 'Try again');
+  const row = [...fake.dailyRows.values()][0];
+  assert.equal(row.name, 'Anna'); assert.equal(row.score, score); assert.equal(row.recording.mode, 'daily');
+  // back in the menu the board shows the entry
+  await page.click('#btn-tomenu');
+  await page.waitForFunction(() => document.querySelectorAll('#daily-board li').length === 1);
+  assert.match(await page.locator('#daily-board li.me').textContent(), /Anna/);
+  assert.match(await page.locator('#daily-me').textContent(), /rank 1 of 1|plats 1 av 1/);
+  // a worse retry keeps the best
+  await page.click('#btn-daily');
+  await page.waitForFunction(() => window.__game && __game.daily && __game.phase === 'aim');
+  await page.evaluate(() => { for (let i = 0; i < 60 * 60 && __game.phase !== 'over'; i++) __game.tick(); });
+  await page.waitForFunction(() => /Your best: \d+|Ditt bästa: \d+/.test(document.getElementById('go-daily').textContent));
+  assert.equal([...fake.dailyRows.values()][0].score, score);
+  assert.equal([...fake.dailyRows.values()][0].attempts, 2);
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
 await test('service worker registers and manifest is valid', async () => {
   const { page, errors } = await open('/');
   const sw = await page.evaluate(async () => {

@@ -124,6 +124,14 @@ button.primary { background: var(--accent); color: var(--accent-ink); }
 button.secondary, a.secondary { background: #efe6d6; color: var(--ink); }
 button.danger { color: #b3261e; }
 .series { margin: -6px 0 12px; font-weight: 700; color: #3aaa5c; }
+.daily { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 12px; }
+.daily h2 { display: flex; align-items: baseline; gap: 10px; }
+.daily-day { font-size: 13px; font-weight: 400; color: #8a7a6a; }
+.daily .actions { margin: 8px 0; }
+.board { margin: 8px 0 0; padding-left: 22px; columns: 2; column-gap: 24px; font-size: 13px; }
+.board li { break-inside: avoid; display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+.board li.me { font-weight: 700; color: #3aaa5c; }
+.board .bname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 8px; }
 .account .row { margin: 6px 0; align-items: flex-end; }
 .account .row label { flex: 1 1 180px; }

@@ -1,6 +1,7 @@
 import { Game, WEAPONS, TICK, RULES_VERSION, rulesSupported, DEFAULT_RULES, TURN_TIMES, SUDDEN_DEATHS, normalizeRules } from './game.js';
 import { snigelpost } from './online.js';
 import { online } from './supa.js';
+import { daily, dailyConfig, dayKey, weaponFor } from './daily.js';
 import { push } from './push.js';
 import { SNAIL_STYLES, TEAM_COLORS } from './snails.js';
 import { unlockAudio, sfx } from './audio.js';
@@ -26,6 +27,7 @@ let onlineMatch = null; // Snigelpost: { id, myTeam, startTick, match, pending }
 let replayUntil = 0; // >0 while the opponent's turn is being shown at speed
 let pollTimer = null;
 let renderAccount = () => {}; // set up once Snigelpost is available
+let dailyGame = null; // { key } while the shot of the day is being played
 const waiting = $('waiting');
 
 // ---------- settings ----------
@@ -102,6 +104,7 @@ function applyLanguage() {
   renderRuleOptions();
   renderMute();
   renderAccount();
+  renderDaily();
   // team names that are still the default of some language follow the language switch
   document.querySelectorAll('.team-row').forEach((row, i) => {
     const input = row.querySelector('input');
@@ -210,6 +213,9 @@ async function startGame() {
   const seedParam = new URLSearchParams(location.search).get('seed');
   if (seedParam !== null && seedParam !== '') cfg.seed = Number(seedParam) | 0;
   if (game && game.phase !== 'over') reportAbandon();
+  dailyGame = null;
+  $('go-daily').hidden = true;
+  $('btn-again').textContent = t('go.again');
   matchStats = { t0: Date.now(), weapons: {} };
   game = new Game(canvas, cfg, {
     onGameOver: (winner) => {
@@ -242,6 +248,68 @@ async function startGame() {
   tryFullscreen();
 }
 
+// ---------- shot of the day ----------
+function dailyKey() { return new URLSearchParams(location.search).get('day') || dayKey(); }
+function startDaily() {
+  unlockAudio();
+  const key = dailyKey();
+  if (game && game.phase !== 'over' && !dailyGame) reportAbandon();
+  matchStats = null;
+  dailyGame = { key, t0: Date.now() };
+  const cfg = dailyConfig(key, settings.style, { me: playerName() === t('online.defaultName') ? t('daily.you') : playerName(), targets: t('daily.targets') });
+  game = new Game(canvas, cfg, {
+    onGameOver: async () => {
+      const score = game.daily.score;
+      track('daily', { day: key, score, weapon: game.daily.weapon, durationSec: Math.round((Date.now() - dailyGame.t0) / 1000) });
+      platform.gameplayStop();
+      $('go-title').textContent = t('daily.title') + ': ' + t('daily.result', { score });
+      $('go-series').hidden = true;
+      $('go-daily').hidden = false;
+      $('go-daily').textContent = daily.available() ? '…' : t('daily.offline');
+      $('btn-again').textContent = t('daily.again');
+      $('btn-again').hidden = false;
+      setTimeout(() => { gameover.hidden = false; }, 1500);
+      if (!daily.available()) return;
+      try {
+        const r = await daily.submit(key, game, playerName());
+        $('go-daily').textContent = (r.improved ? t('daily.improved') + ' ' : '') + t('daily.rank', { rank: r.rank, total: r.total, best: r.best });
+        renderDaily();
+      } catch (e) { $('go-daily').textContent = t('daily.notSent', { msg: e.message }); }
+    },
+    onTurn: () => { camDrag.active = false; },
+  });
+  platform.gameplayStart();
+  window.__game = game;
+  buildWeaponBar();
+  menu.hidden = true; gameover.hidden = true; waiting.hidden = true; help.hidden = true;
+  hud.hidden = false;
+  lastTs = performance.now(); acc = 0;
+  endTutorial(false);
+  tryFullscreen();
+}
+async function renderDaily() {
+  const key = dailyKey();
+  $('daily-day').textContent = key;
+  $('daily-blurb').textContent = t('daily.blurb', { wpn: t('weapon.' + weaponFor(key)).toLowerCase() });
+  const board = $('daily-board'), me = $('daily-me'), st = $('daily-status');
+  if (!daily.available()) { st.textContent = t('daily.offline'); return; }
+  try {
+    const b = await daily.board(key);
+    board.innerHTML = '';
+    b.top.forEach((row) => {
+      const li = document.createElement('li');
+      li.className = row.me ? 'me' : '';
+      li.innerHTML = `<span class="bname"></span><span class="bscore"></span>`;
+      li.querySelector('.bname').textContent = row.name;
+      li.querySelector('.bscore').textContent = row.score;
+      board.appendChild(li);
+    });
+    me.textContent = b.me ? t('daily.me', { score: b.me.score, rank: b.me.rank, total: b.total }) + ' ' + t('daily.attempts', { n: b.me.attempts }) : '';
+    st.textContent = b.total ? '' : t('daily.none');
+  } catch (e) { st.textContent = t('online.error', { msg: e.message }); }
+}
+$('btn-daily').addEventListener('click', startDaily);
+
 function reportAbandon() {
   if (!game || !matchStats) return;
   track('match_abandon', { turns: game.turnCount, durationSec: Math.round((Date.now() - matchStats.t0) / 1000) });
@@ -249,7 +317,8 @@ function reportAbandon() {
 }
 
 function toMenu() {
-  if (game && game.phase !== 'over' && !onlineMatch) { reportAbandon(); platform.gameplayStop(); }
+  if (game && game.phase !== 'over' && !onlineMatch && !dailyGame) { reportAbandon(); platform.gameplayStop(); }
+  if (dailyGame) { dailyGame = null; renderDaily(); }
   stopPolling();
   onlineMatch = null;
   replayUntil = 0;
@@ -268,7 +337,7 @@ $('btn-start').addEventListener('click', startGame);
 $('btn-help').addEventListener('click', () => (help.hidden = false));
 $('btn-help-close').addEventListener('click', () => (help.hidden = true));
 $('btn-guide').addEventListener('click', () => { settings.tutorialDone = false; saveSettings(settings); help.hidden = true; });
-$('btn-again').addEventListener('click', startGame);
+$('btn-again').addEventListener('click', () => (dailyGame ? startDaily() : startGame()));
 $('btn-tomenu').addEventListener('click', toMenu);
 $('btn-menu').addEventListener('click', toMenu);
 
@@ -817,13 +886,12 @@ function updateHud(now) {
   if (rows.childElementCount !== st.teams.length) {
     rows.innerHTML = st.teams.map(() => '<div class="trow"><span class="tname"></span><div class="tbar"><div></div></div><span class="tcount"></span></div>').join('');
   }
-  const max = 100 * (game.config.snailsPerTeam || 3);
   st.teams.forEach((tm, i) => {
     const r = rows.children[i];
     r.classList.toggle('dead', tm.alive === 0);
     r.querySelector('.tname').textContent = tm.name;
     const bar = r.querySelector('.tbar > div');
-    bar.style.width = (100 * tm.hp) / max + '%';
+    bar.style.width = (100 * tm.hp) / (100 * (tm.total || game.config.snailsPerTeam || 3)) + '%';
     bar.style.background = tm.color;
     r.querySelector('.tcount').textContent = `${tm.alive}`;
   });
