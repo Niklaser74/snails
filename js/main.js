@@ -4,6 +4,7 @@ import { online } from './supa.js';
 import { daily, dailyConfig, dayKey, weaponFor } from './daily.js';
 import { SHELLS, HATS, unlockedFor, normalizeLook } from './cosmetics.js';
 import { season, tierFor } from './season.js';
+import { pollGamepad } from './gamepad.js';
 import { push } from './push.js';
 import { SNAIL_STYLES, TEAM_COLORS, drawSnail } from './snails.js';
 import { unlockAudio, sfx } from './audio.js';
@@ -955,17 +956,19 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Escape') { toMenu(); return; }
   if (game.ai || game.replay) return;
   if (/^Digit[1-9]$/.test(e.code) && game.weapons[+e.code[5] - 1]) game.selectWeapon(game.weapons[+e.code[5] - 1].id);
-  if (e.code === 'Tab') {
-    e.preventDefault();
-    const ammo = game.active ? game.teams[game.active.team].ammo : {};
-    const ws = game.weapons;
-    let i = ws.findIndex((w) => w.id === game.weaponId);
-    for (let k = 0; k < ws.length; k++) {
-      i = (i + 1) % ws.length;
-      if (ammo[ws[i].id] > 0) { game.selectWeapon(ws[i].id); break; }
-    }
-  }
+  if (e.code === 'Tab') { e.preventDefault(); cycleWeapon(e.shiftKey ? -1 : 1); }
 });
+// next/previous weapon that has ammo
+function cycleWeapon(dir) {
+  if (!game || game.ai || game.replay) return;
+  const ammo = game.active ? game.teams[game.active.team].ammo : {};
+  const ws = game.weapons;
+  let i = ws.findIndex((w) => w.id === (game.input.weapon || game.weaponId)); // from the pending choice, so quick presses chain
+  for (let k = 0; k < ws.length; k++) {
+    i = (i + dir + ws.length) % ws.length;
+    if (ammo[ws[i].id] > 0) { game.selectWeapon(ws[i].id); break; }
+  }
+}
 addEventListener('keyup', (e) => {
   if (!game) return;
   const k = keyMap[e.code];
@@ -1071,6 +1074,7 @@ function updateHud(now) {
 let acc = 0;
 function frame(ts) {
   requestAnimationFrame(frame);
+  handleGamepad();
   if (!game) return;
   const real = Math.min(0.25, (ts - lastTs) / 1000);
   lastTs = ts;
@@ -1093,6 +1097,25 @@ function frame(ts) {
   updateHud(ts);
 }
 requestAnimationFrame(frame);
+
+// ---------- gamepad ----------
+function handleGamepad() {
+  const playing = !!game && menu.hidden && gameover.hidden && waiting.hidden && help.hidden;
+  const canControl = playing && !game.ai && !game.replay && !replayUntil && game.isLocalTurn();
+  const ev = pollGamepad(game, canControl);
+  if (ev.justConnected) notice(t('pad.connected'), 4000);
+  if (ev.any) unlockAudio();
+  if (ev.mute) toggleMute();
+  if (playing) {
+    if (ev.prevWeapon) cycleWeapon(-1);
+    if (ev.nextWeapon) cycleWeapon(1);
+    if (ev.menu) { toMenu(); return; }
+    if (ev.camX || ev.camY) { game.cam.manual = true; game.cam.punch = null; game.cam.x += ev.camX * 14 / game.cam.zoom; game.cam.y += ev.camY * 14 / game.cam.zoom; }
+  } else if (ev.menu) {
+    if (!gameover.hidden) $('btn-again').click();
+    else if (!menu.hidden && !dailyGame && !onlineMatch) startGame();
+  }
+}
 
 // ---------- platform ----------
 if (!platform.allowExternalLinks) {

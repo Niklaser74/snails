@@ -54,6 +54,7 @@ sätts i `js/main.js` (`settings.style`).
   Se `supabase/README.md`.
 - Tangentbord: ← → / A D gå, ↑ ↓ / W S sikta, mellanslag ladda+skjut, Enter hoppa,
   1–8 / Tab vapen, Esc meny. Touch: knappar på skärmen, dra för att panorera, nyp för zoom.
+  Handkontroll: styrkors/spak, A skjut, B hoppa, LB/RB vapen, högerspak kamera, Start meny.
 
 ## Snigelpost (asynkront multiplayer)
 
@@ -113,6 +114,7 @@ js/daily.js           Dagens skott: bana och vapen ur datumet, topplista
 js/cosmetics.js       skalmönster och hattar, upplåsningsregler, ritning
 js/season.js          säsong (kvartal), Elo-spegel och ranknivåer
 js/themes.js          terrängteman: färger och dekorationer, rent visuellt
+js/gamepad.js         handkontroll (Gamepad API), skriver in i game.input
 js/terrain.js         förstörbar terräng (canvas + kollisionsmask)
 js/snails.js          snäck-sprites (alla stilar)
 js/audio.js           syntetiserade ljudeffekter

@@ -25,7 +25,8 @@ att göra det hållbart, roligare och till slut lönsamt.
 | AI-nivåer: lätt, normal, svår | |
 | Tester i CI (Node + Playwright) | |
 | Terrängteman: trädgårdsland, strand, regnskog, slumpat ur fröet eller valt i menyn | |
-| Förhandsbana vid sikte | Inställningar: dragtid, plötslig död, ljud av/på, gamepad |
+| Förhandsbana vid sikte | |
+| Inställningar: dragtid, plötslig död, ljud av/på; handkontroll (Gamepad API) | |
 | Lagrat ljud: mastervolym, ljud av/på i HUD:en, lager av brus och toner | Inspelade ljud och musik |
 | Regler i menyn: dragtid, plötslig död; slow motion vid dödsskott | |
 

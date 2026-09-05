@@ -151,6 +151,66 @@ await test('visuals: slime trail while crawling, cracks with damage, shards when
   await page.close();
 });
 
+await test('gamepad: stick and buttons drive the input, shoulder buttons switch weapons, Start opens the menu', async () => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  page.setDefaultTimeout(20000);
+  await fake.install(page);
+  const errors = [];
+  page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+  // a fake standard-mapping pad the test can drive
+  await page.addInitScript(() => {
+    const pad = { id: 'Test Pad', index: 0, connected: false, mapping: 'standard', axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })) };
+    window.__pad = pad;
+    window.__press = (i, on = true) => { pad.buttons[i].pressed = on; pad.buttons[i].value = on ? 1 : 0; };
+    navigator.getGamepads = () => [pad];
+  });
+  await page.goto(base + '/?seed=4242');
+  await page.selectOption('.team-row:nth-child(2) select', 'easy');
+  await page.click('#btn-start');
+  await page.waitForFunction(() => window.__game);
+  await page.evaluate(() => { window.__manualTick = true; });
+  await page.click('#tut-skip').catch(() => {});
+  await page.evaluate(() => { __pad.connected = true; });
+  await page.waitForFunction(() => /Gamepad connected|Handkontroll ansluten/.test(document.getElementById('notice').textContent));
+  // left stick right + d-pad up
+  await page.evaluate(() => { __pad.axes[0] = 0.9; __press(12); });
+  await page.waitForFunction(() => __game.input.right && __game.input.up && !__game.input.left);
+  await page.evaluate(() => { __pad.axes[0] = 0; __press(12, false); });
+  await page.waitForFunction(() => !__game.input.right && !__game.input.up);
+  // RB then LB cycle the weapon, edge-triggered (holding does not keep cycling)
+  const w0 = await page.evaluate(() => __game.weaponId);
+  await page.evaluate(() => __press(5));
+  await page.waitForFunction((w) => __game.input.weapon !== w, w0);
+  const w1 = await page.evaluate(() => __game.input.weapon);
+  await page.waitForTimeout(120);
+  assert.equal(await page.evaluate(() => __game.input.weapon), w1, 'holding RB must not keep cycling');
+  await page.evaluate(() => { __press(5, false); __press(4); });
+  await page.waitForFunction((w) => __game.input.weapon === w, w0);
+  await page.evaluate(() => __press(4, false));
+  // A fires: the input is held while the button is
+  await page.evaluate(() => __press(0));
+  await page.waitForFunction(() => __game.input.fire);
+  await page.evaluate(() => __press(0, false));
+  await page.waitForFunction(() => !__game.input.fire);
+  // B jumps (one shot), right stick pans the camera
+  await page.evaluate(() => __press(1));
+  await page.waitForFunction(() => __game.input.jump);
+  await page.evaluate(() => { __press(1, false); __pad.axes[2] = 1; });
+  const cx = await page.evaluate(() => __game.cam.x);
+  await page.waitForFunction((x) => __game.cam.manual && __game.cam.x > x + 20, cx);
+  await page.evaluate(() => { __pad.axes[2] = 0; });
+  // Start goes to the menu, Start again starts a match
+  await page.evaluate(() => __press(9));
+  await page.waitForSelector('#menu:not([hidden])');
+  await page.evaluate(() => __press(9, false));
+  await page.waitForTimeout(80);
+  await page.evaluate(() => __press(9));
+  await page.waitForFunction(() => document.getElementById('menu').hidden && window.__game && __game.tickCount === 0);
+  await page.evaluate(() => __press(9, false));
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
 await test('AI vs AI in the browser matches the headless Node simulation', async () => {
   const seed = 20260904;
   const { page, errors } = await open(`/?seed=${seed}`);
