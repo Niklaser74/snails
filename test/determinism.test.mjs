@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Game, RULES_VERSION, SUPPORTED_RULES, weaponsFor } from '../js/game.js';
 import { dailyConfig, seedFor, weaponFor, dayKey } from '../js/daily.js';
+import { unlockedFor, normalizeLook, SHELLS, HATS } from '../js/cosmetics.js';
 
 const cfg = (seed) => ({
   seed,
@@ -383,6 +384,25 @@ test('shot of the day: same map for everyone, one shot, score is the damage, rep
   while (rep.tickCount < idle.tickCount) rep.tick();
   assert.equal(rep.daily.score, idle.daily.score);
   assert.equal(rep.stateHash(), idle.stateHash());
+});
+
+test('cosmetics: unlock rules match the server, looks never touch the simulation', () => {
+  assert.deepEqual(unlockedFor({}), ['spiral', 'stripes', 'dots', 'none', 'cap', 'party']);
+  assert.ok(unlockedFor({ wins: 5 }).includes('flame') && !unlockedFor({ wins: 4 }).includes('flame'));
+  assert.ok(unlockedFor({ wins: 10 }).includes('crown'));
+  assert.ok(unlockedFor({ dailyBest: 250 }).includes('stars') && unlockedFor({ dailyBest: 350 }).includes('viking'));
+  assert.ok(!unlockedFor({ wins: 999, dailyBest: 450 }).includes('gold'), 'premium is not unlockable yet');
+  assert.deepEqual(normalizeLook({ shell: 'flame', hat: 'crown' }, unlockedFor({})), { shell: 'spiral', hat: 'none' });
+  assert.deepEqual(normalizeLook({ shell: 'dots', hat: 'nonsense' }), { shell: 'dots', hat: 'none' });
+  assert.ok(SHELLS.every((s) => s.free || s.need || s.premium) && HATS.every((h) => h.free || h.need || h.premium));
+  // a look on a team changes nothing in the state hash or the recording inputs
+  const c = cfg(64);
+  c.teams[0].look = { shell: 'gold', hat: 'tophat' };
+  const a = new Game(null, c), b = new Game(null, cfg(64));
+  assert.equal(a.teams[0].look.hat, 'tophat');
+  run(a, 60 * 60); run(b, 60 * 60);
+  assert.equal(a.stateHash(), b.stateHash(), 'a look leaked into the simulation');
+  assert.equal(JSON.stringify(a.recording.teams), JSON.stringify(b.recording.teams), 'the recording must not carry looks');
 });
 
 test('turn time and sudden death are match rules that travel with the recording', () => {

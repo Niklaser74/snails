@@ -94,6 +94,20 @@ Banan, vapnet och målen kommer ur datumet (`js/daily.js`), så alla spelar
 samma skott. Servern litar på klientens poäng men sparar inspelningen, så en
 edge-funktion kan senare spela upp den och kontrollera poängen.
 
+# Profil och kosmetik
+
+`snails_profiles` (`migrations/20260905010000_profiles.sql`) har namn och
+utseende (`look`: skalmönster och hatt) per spelare. `snails_profile` ger
+profilen, statistik (vinster, förluster, bästa Dagens skott) och listan över
+upplåsta saker; `snails_profile_set` sparar namn och utseende men byter ut
+allt som inte är upplåst mot standard. Reglerna ligger i `snails_unlocked`
+och speglas i `js/cosmetics.js`: stjärnor 250 p, eld 5 vinster, krona 10
+vinster, vikingahjälm 350 p. Guld och cylinder är premium och kan inte låsas
+upp än. Utseendet stämplas på matchen (`snails_matches.looks`) när den
+skapas, ansluts, fortsätts i en serie eller revansch, så motståndarens enhet
+kan rita det utan extra anrop. Byter man utseende uppdateras pågående
+matcher.
+
 # E-postkoppling av kontot
 
 Ett anonymt konto kan kopplas till en e-postadress i menyn (Snigelpost →

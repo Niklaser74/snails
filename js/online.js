@@ -19,6 +19,8 @@ export const snigelpost = {
       p_best_of: bestOf,
     });
   },
+  async profile() { return online.rpc('snails_profile'); },
+  async profileSet(name, look) { return online.rpc('snails_profile_set', { p_name: name, p_look: look }); },
   async extend(id, bestOf) { return online.rpc('snails_extend_series', { p_match: id, p_best_of: bestOf }); },
   // the series continues in another match than this one
   nextMatchId(match) {
@@ -67,8 +69,8 @@ export const snigelpost = {
       ...normalizeRules(match.config),
       style,
       teams: [
-        { name: match.names?.['0'] || 'Värd', color: TEAM_COLORS[0].hex, ai: false },
-        { name: match.names?.['1'] || '…', color: TEAM_COLORS[1].hex, ai: false },
+        { name: match.names?.['0'] || 'Värd', color: TEAM_COLORS[0].hex, ai: false, look: match.looks?.['0'] || null },
+        { name: match.names?.['1'] || '…', color: TEAM_COLORS[1].hex, ai: false, look: match.looks?.['1'] || null },
       ],
     };
   },

@@ -41,8 +41,9 @@ att göra det hållbart, roligare och till slut lönsamt.
 ### Fas 3 – Progression och identitet
 | Klart | Kvar |
 |---|---|
-| Dagens skott: samma bana och vapen för alla per dag, ett skott, topplista, bästa försöket räknas | Profil och kosmetik (intäktsytan) |
-| E-postkoppling (fas 2) som grund | Rank och säsonger |
+| Dagens skott: samma bana och vapen för alla per dag, ett skott, topplista, bästa försöket räknas | Betalning för premiumkosmetik (guldskal, cylinder) |
+| Profil: namn, statistik, skalmönster och hattar; låses upp med vinster och Dagens skott; syns för motståndaren | Rank och säsonger |
+| E-postkoppling (fas 2) som grund | |
 | | Serversidig verifiering av dagens skott (inspelningen sparas redan) |
 
 ### Fas 4 – Distribution
@@ -103,8 +104,10 @@ Stripe när e-postkoppling finns, sedan säsongspass och belönad reklam.
    version, facit-inspelningar i testerna, solnedgång på servern.
 
 ~~Därefter fas 3, med "Dagens skott" först eftersom det är billigast och ger
-daglig återkomst utan att kräva kosmetik.~~ Dagens skott klart 2026-09-05.
-Nästa: profil och kosmetik, sedan rank och säsonger.
+daglig återkomst utan att kräva kosmetik.~~ Dagens skott klart 2026-09-05. Profil och kosmetik klart 2026-09-05; två
+premiumsaker ligger låsta som "kommer snart" tills betalning finns (Stripe
+eller butikernas köp, kräver e-postkopplat konto).
+Nästa: rank och säsonger, sedan betalning.
 
 ## Risker
 

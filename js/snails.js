@@ -11,7 +11,9 @@
 //     walking,       true while moving (foot ripple, stalk sway)
 //     aim,           aim angle in radians (eye direction), optional
 //     dead,          draw as a gravestone-ish empty shell
+//     look,          cosmetics { shell, hat } (js/cosmetics.js), optional
 //   })
+import { drawShellPattern, drawHat } from './cosmetics.js';
 
 export const SNAIL_STYLES = [
   {
@@ -512,6 +514,10 @@ export function drawSnail(ctx, style, o) {
         break;
       case 'flat': drawFlat(ctx, o); break;
       default: drawCartoon(ctx, o, false);
+    }
+    if (o.look) {
+      if (style === 'cartoon' || style === 'flat') drawShellPattern(ctx, o.look, o.color);
+      drawHat(ctx, o.look);
     }
   }
   ctx.restore();

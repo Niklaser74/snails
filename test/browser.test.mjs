@@ -477,6 +477,41 @@ await test('account: link an e-mail, then sign in with a login link on another d
   await ctxA.close(); await ctxB.close();
 });
 
+await test('profile: pick a look, locked items stay locked, the look shows up in matches', async () => {
+  const { page, errors } = await open('/?seed=4242');
+  await page.waitForFunction(() => document.querySelectorAll('#pick-shell button').length === 6 && document.querySelectorAll('#pick-hat button').length === 6);
+  assert.equal(await page.locator('#pick-shell button.sel').getAttribute('data-id'), 'spiral');
+  assert.equal(await page.locator('#pick-hat button.locked').count(), 3, 'crown, viking and top hat are locked at first');
+  assert.equal(await page.locator('#pick-hat button[data-id=crown]').isDisabled(), true);
+  assert.match(await page.locator('#pick-hat button[data-id=crown]').textContent(), /10 wins|10 vinster/);
+  assert.match(await page.locator('#pick-shell button[data-id=gold]').textContent(), /Coming soon|Kommer snart/);
+  await page.click('#pick-shell button[data-id=dots]');
+  await page.click('#pick-hat button[data-id=party]');
+  assert.equal(await page.locator('#pick-hat button.sel').getAttribute('data-id'), 'party');
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('snackmageddon.settings')).look.hat === 'party');
+  // saved on the server (debounced) and used for the human team in a local match
+  await until(() => [...fake.profiles.values()].some((p) => p.look.shell === 'dots' && p.look.hat === 'party'), 'look not saved on the server');
+  await page.selectOption('.team-row:nth-child(2) select', 'hard');
+  await page.click('#btn-start');
+  await page.waitForFunction(() => window.__game);
+  const looks = await page.evaluate(() => __game.teams.map((t) => t.look));
+  assert.deepEqual(looks[0], { shell: 'dots', hat: 'party' });
+  assert.equal(looks[1], null, 'the computer team has no look');
+  // a Snigelpost match carries the look for the opponent to draw
+  await page.click('#btn-menu');
+  await page.click('#btn-online-create');
+  await page.waitForSelector('#waiting:not([hidden])');
+  const m = [...fake.matches.values()].pop();
+  assert.deepEqual(m.looks, { 0: { shell: 'dots', hat: 'party' } });
+  assert.deepEqual(await page.evaluate(() => __game.teams[0].look), { shell: 'dots', hat: 'party' });
+  // the look survives a reload
+  await page.click('#btn-wait-menu');
+  await page.reload();
+  await page.waitForFunction(() => document.querySelector('#pick-hat button.sel')?.dataset.id === 'party');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
 await test('shot of the day: play, get a score, see it on the leaderboard', async () => {
   const { page, errors } = await open('/?day=2026-09-05');
   await page.waitForFunction(() => document.getElementById('daily-day').textContent === '2026-09-05');

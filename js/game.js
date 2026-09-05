@@ -252,7 +252,7 @@ export class Game {
     const names = shuffle([...SNAIL_NAMES], this.rng);
     let ni = 0;
     this.teams = this.config.teams.map((t, ti) => ({
-      index: ti, name: t.name, color: t.color, ai: aiLevel(t.ai), nextSnail: 0,
+      index: ti, name: t.name, color: t.color, ai: aiLevel(t.ai), look: t.look || null, nextSnail: 0, // look is visual only
       snails: [], ammo: Object.fromEntries(this.weapons.map((w) => [w.id, w.ammo])),
     }));
     if (this.daily) for (const t of this.teams) for (const w of this.weapons) t.ammo[w.id] = w.id === this.daily.weapon ? 1 : 0;
@@ -1264,7 +1264,7 @@ export class Game {
     // snails
     for (const s of this.snails) {
       if (!s.alive) { drawSnail(ctx, this.style, { x: s.x, y: s.y, facing: s.facing, color: s.color, t: this.time, dead: true, scale: SNAIL_SCALE }); continue; }
-      drawSnail(ctx, this.style, { x: s.x, y: s.y, facing: s.facing, color: s.color, t: this.time + s.id, walking: s.walking, aim: s === this.active ? s.aim : 0, scale: SNAIL_SCALE });
+      drawSnail(ctx, this.style, { x: s.x, y: s.y, facing: s.facing, color: s.color, t: this.time + s.id, walking: s.walking, aim: s === this.active ? s.aim : 0, scale: SNAIL_SCALE, look: this.teams[s.team].look });
       // label
       ctx.font = 'bold 10px system-ui, sans-serif';
       ctx.textAlign = 'center';

@@ -2,8 +2,9 @@ import { Game, WEAPONS, TICK, RULES_VERSION, rulesSupported, DEFAULT_RULES, TURN
 import { snigelpost } from './online.js';
 import { online } from './supa.js';
 import { daily, dailyConfig, dayKey, weaponFor } from './daily.js';
+import { SHELLS, HATS, unlockedFor, normalizeLook } from './cosmetics.js';
 import { push } from './push.js';
-import { SNAIL_STYLES, TEAM_COLORS } from './snails.js';
+import { SNAIL_STYLES, TEAM_COLORS, drawSnail } from './snails.js';
 import { unlockAudio, sfx } from './audio.js';
 import { LANGS, t, fmt, setLang, getLang, detectLang, applyDom } from './i18n.js';
 import { initAnalytics, track, setAnalyticsLang, installErrorReporting } from './analytics.js';
@@ -28,6 +29,7 @@ let replayUntil = 0; // >0 while the opponent's turn is being shown at speed
 let pollTimer = null;
 let renderAccount = () => {}; // set up once Snigelpost is available
 let dailyGame = null; // { key } while the shot of the day is being played
+let profileState = { unlocked: [], stats: {}, online: false }; // filled in once settings are loaded
 const waiting = $('waiting');
 
 // ---------- settings ----------
@@ -40,6 +42,9 @@ function saveSettings(s) {
 const DEFAULT_STYLE = 'cartoon'; // vald standarddesign: Tecknad (Worms-stil)
 const settings = Object.assign({ teams: 2, per: 3, style: DEFAULT_STYLE, rows: [], lang: null, tutorialDone: false, ...DEFAULT_RULES, volume: 0.8, muted: false }, loadSettings());
 Object.assign(settings, normalizeRules(settings));
+settings.look = normalizeLook(settings.look);
+settings.stats = settings.stats || {}; // last known stats from the server, for unlocks when offline
+profileState = { unlocked: unlockedFor(settings.stats), stats: settings.stats, online: false };
 
 // ---------- sound ----------
 setVolume(settings.volume);
@@ -88,6 +93,7 @@ const isDefaultTeamName = (name, i) => Object.keys(LANGS).some((l) => defaultTea
 const styleSel = $('opt-style');
 function renderStyleOptions() {
   const cur = styleSel.value || settings.style;
+  if (document.getElementById('pick-shell')) queueMicrotask(renderProfile);
   styleSel.innerHTML = '';
   for (const st of SNAIL_STYLES) {
     const o = document.createElement('option');
@@ -105,6 +111,7 @@ function applyLanguage() {
   renderMute();
   renderAccount();
   renderDaily();
+  renderProfile();
   // team names that are still the default of some language follow the language switch
   document.querySelectorAll('.team-row').forEach((row, i) => {
     const input = row.querySelector('input');
@@ -193,6 +200,7 @@ function readConfig() {
   settings.rows = rows;
   const rules = readRules();
   saveSettings(settings);
+  for (const r of rows) if (!r.ai) r.look = settings.look;
   return { teams: rows, snailsPerTeam: settings.per, style: settings.style, ...rules };
 }
 
@@ -257,6 +265,7 @@ function startDaily() {
   matchStats = null;
   dailyGame = { key, t0: Date.now() };
   const cfg = dailyConfig(key, settings.style, { me: playerName() === t('online.defaultName') ? t('daily.you') : playerName(), targets: t('daily.targets') });
+  cfg.teams[0].look = settings.look;
   game = new Game(canvas, cfg, {
     onGameOver: async () => {
       const score = game.daily.score;
@@ -309,6 +318,67 @@ async function renderDaily() {
   } catch (e) { st.textContent = t('online.error', { msg: e.message }); }
 }
 $('btn-daily').addEventListener('click', startDaily);
+
+// ---------- profile: stats and look ----------
+function needText(c) {
+  if (c.premium) return t('cos.premium');
+  if (c.need?.wins) return t('cos.needWins', { n: c.need.wins });
+  if (c.need?.dailyBest) return t('cos.needDaily', { n: c.need.dailyBest });
+  return '';
+}
+function renderPicker(boxId, items, kind) {
+  const box = $(boxId);
+  box.innerHTML = '';
+  for (const c of items) {
+    const locked = !profileState.unlocked.includes(c.id);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.id = c.id;
+    b.className = (settings.look[kind] === c.id ? 'sel' : '') + (locked ? ' locked' : '');
+    b.disabled = locked;
+    b.title = t(`cos.${kind}.${c.id}`) + (locked ? ' – ' + needText(c) : '');
+    const cv = document.createElement('canvas');
+    cv.width = 96; cv.height = 88;
+    const ctx = cv.getContext('2d');
+    const look = { ...settings.look, [kind]: c.id };
+    if (kind === 'hat') look.shell = 'spiral';
+    drawSnail(ctx, settings.style, { x: 46, y: 74, facing: 1, color: TEAM_COLORS[0].hex, t: 0, scale: 1.7, look });
+    const label = document.createElement('span');
+    label.textContent = locked ? '🔒 ' + needText(c) : t(`cos.${kind}.${c.id}`);
+    b.append(cv, label);
+    if (!locked) b.addEventListener('click', () => setLook({ ...settings.look, [kind]: c.id }));
+    box.appendChild(b);
+  }
+}
+function renderProfile() {
+  const st = profileState.stats || {};
+  $('profile-stats').textContent = (profileState.online ? t('profile.stats', { wins: st.wins || 0, losses: st.losses || 0, best: st.dailyBest || 0, plays: st.dailyPlays || 0 }) + ' ' : '') + t('profile.local');
+  renderPicker('pick-shell', SHELLS, 'shell');
+  renderPicker('pick-hat', HATS, 'hat');
+}
+async function loadProfile() {
+  if (!snigelpost.available()) { renderProfile(); return; }
+  try {
+    const p = await snigelpost.profile();
+    profileState = { unlocked: p.unlocked, stats: p.stats, online: true };
+    settings.stats = p.stats;
+    if (p.name && !settings.playerName) { settings.playerName = p.name; $('opt-name').value = p.name; }
+    // the server's copy wins when it has one; otherwise push the local look up
+    if (p.look && p.look.shell) settings.look = normalizeLook(p.look, p.unlocked);
+    else await snigelpost.profileSet(playerName(), settings.look).catch(() => {});
+    saveSettings(settings);
+  } catch { /* offline or not signed in: local look only */ }
+  renderProfile();
+}
+let saveLookTimer = null;
+function setLook(look) {
+  settings.look = normalizeLook(look, profileState.unlocked);
+  saveSettings(settings);
+  renderProfile();
+  if (!snigelpost.available()) return;
+  clearTimeout(saveLookTimer);
+  saveLookTimer = setTimeout(() => snigelpost.profileSet(playerName(), settings.look).then((p) => { profileState = { unlocked: p.unlocked, stats: p.stats, online: true }; }).catch(() => {}), 300);
+}
 
 function reportAbandon() {
   if (!game || !matchStats) return;
@@ -718,7 +788,8 @@ addEventListener('visibilitychange', () => { if (!document.hidden) pollMatch(fal
 if (snigelpost.available()) {
   $('online').hidden = false;
   $('opt-name').value = settings.playerName || '';
-  $('opt-name').addEventListener('change', () => { settings.playerName = $('opt-name').value.trim().slice(0, 24); saveSettings(settings); });
+  $('opt-name').addEventListener('change', () => { settings.playerName = $('opt-name').value.trim().slice(0, 24); saveSettings(settings); snigelpost.profileSet(playerName(), settings.look).catch(() => {}); });
+  loadProfile();
   $('btn-online-create').addEventListener('click', async () => {
     const b = $('btn-online-create');
     b.disabled = true;

@@ -7,6 +7,18 @@ export function createFakeSupabase() {
   const mails = []; // e-mails Supabase would have sent: { to, kind, uid }
   const supportedRules = [2, 3]; // mirrors snails_rules on the server
   const dailyRows = new Map(); // `${day}/${uid}` -> row
+  const profiles = new Map(); // uid -> { name, look }
+  const FREE = ['spiral', 'stripes', 'dots', 'none', 'cap', 'party'];
+  const statsFor = (uid) => {
+    const fin = [...matches.values()].filter((m) => m.status === 'finished' && m.guest && (m.host === uid || m.guest === uid));
+    const wins = fin.filter((m) => (m.host === uid && m.winner === 0) || (m.guest === uid && m.winner === 1)).length;
+    const losses = fin.filter((m) => (m.host === uid && m.winner === 1) || (m.guest === uid && m.winner === 0)).length;
+    const mine = [...dailyRows.values()].filter((r) => r.uid === uid);
+    return { matches: fin.length, wins, losses, dailyBest: Math.max(0, ...mine.map((r) => r.score)), dailyPlays: mine.reduce((a, r) => a + r.attempts, 0) };
+  };
+  const unlockedFor = (uid) => { const st = statsFor(uid), u = [...FREE]; if (st.dailyBest >= 250) u.push('stars'); if (st.wins >= 5) u.push('flame'); if (st.wins >= 10) u.push('crown'); if (st.dailyBest >= 350) u.push('viking'); return u; };
+  const cleanLook = (look, u) => ({ shell: u.includes(look?.shell) ? look.shell : 'spiral', hat: u.includes(look?.hat) ? look.hat : 'none' });
+  const myLook = (uid) => profiles.get(uid)?.look || {};
   const matches = new Map();
   const turns = new Map(); // match id -> [turns]
   const events = [];
@@ -24,10 +36,10 @@ export function createFakeSupabase() {
     return { id: s.id, best_of: s.best_of, match_no: s.match_no, status: s.status, current_match: s.current_match,
       won_by_me: !!s.winner_user && s.winner_user === uid, wins_me: me ? s.wins_host : s.wins_guest, wins_them: me ? s.wins_guest : s.wins_host };
   };
-  const mview = (m, uid) => ({ ...view(m, uid), match_no: m.match_no || 1, series: m.series_id ? seriesView(m.series_id, uid) : null });
+  const mview = (m, uid) => ({ ...view(m, uid), looks: m.looks || {}, match_no: m.match_no || 1, series: m.series_id ? seriesView(m.series_id, uid) : null });
   const newMatch = (fields) => { const m = { id: uuid(), created_at: new Date().toISOString(), updated_at: new Date().toISOString(), turn_team: 0, turn_count: 0, tick_count: 0, winner: null, last_hash: null, guest: null, status: 'open', match_no: 1, series_id: null, ...fields }; matches.set(m.id, m); turns.set(m.id, []); return m; };
   const nextMatch = (s, prev) => {
-    const n = newMatch({ rules_version: prev.rules_version, seed: 4321 + s.match_no, config: prev.config, names: { 0: prev.names[1], 1: prev.names[0] }, host: prev.guest, guest: prev.host, status: 'playing', series_id: s.id, match_no: s.match_no + 1 });
+    const n = newMatch({ rules_version: prev.rules_version, seed: 4321 + s.match_no, config: prev.config, names: { 0: prev.names[1], 1: prev.names[0] }, looks: { 0: prev.looks?.[1] || {}, 1: prev.looks?.[0] || {} }, host: prev.guest, guest: prev.host, status: 'playing', series_id: s.id, match_no: s.match_no + 1 });
     s.match_no = n.match_no; s.current_match = n.id; s.updated_at = new Date().toISOString();
     return n;
   };
@@ -44,6 +56,13 @@ export function createFakeSupabase() {
 
   const rpc = {
     snails_supported_rules() { return supportedRules; },
+    snails_profile(uid) { const p = profiles.get(uid); return { name: p?.name || '', look: p?.look || {}, stats: statsFor(uid), unlocked: unlockedFor(uid) }; },
+    snails_profile_set(uid, a) {
+      const look = cleanLook(a.p_look, unlockedFor(uid));
+      profiles.set(uid, { name: (a.p_name || 'Snäcka').slice(0, 24), look });
+      for (const m of matches.values()) if (m.status !== 'finished') { if (m.host === uid) m.looks = { ...(m.looks || {}), 0: look }; if (m.guest === uid) m.looks = { ...(m.looks || {}), 1: look }; }
+      return rpc.snails_profile(uid);
+    },
     snails_daily_submit(uid, a) {
       if (!supportedRules.includes(a.p_rules_version)) throw new Error('rules version not supported');
       if (a.p_score < 0 || a.p_score > 450) throw new Error('score out of range');
@@ -65,7 +84,7 @@ export function createFakeSupabase() {
       if (!supportedRules.includes(a.p_rules_version)) throw Object.assign(new Error(`rules version ${a.p_rules_version} is not supported`), { status: 400, body: { message: `rules version ${a.p_rules_version} is not supported` } });
       const s = { id: uuid(), host: uid, guest: null, names: { 0: a.p_name || 'Värd' }, best_of: a.p_best_of ?? 3, wins_host: 0, wins_guest: 0, match_no: 1, current_match: null, status: 'open', winner_user: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       series.set(s.id, s);
-      const m = newMatch({ rules_version: a.p_rules_version, seed: a.p_seed, config: a.p_config, names: { ...s.names }, host: uid, series_id: s.id });
+      const m = newMatch({ rules_version: a.p_rules_version, seed: a.p_seed, config: a.p_config, names: { ...s.names }, host: uid, looks: { 0: myLook(uid) }, series_id: s.id });
       s.current_match = m.id;
       return mview(m, uid);
     },
@@ -74,7 +93,7 @@ export function createFakeSupabase() {
       if (m.host === uid || m.guest === uid) return mview(m, uid);
       if (m.guest) throw err('match is full');
       const nm = a.p_name || 'Gäst';
-      m.guest = uid; m.status = 'playing'; m.names = { ...m.names, 1: nm }; m.updated_at = new Date().toISOString();
+      m.guest = uid; m.looks = { ...(m.looks || {}), 1: myLook(uid) }; m.status = 'playing'; m.names = { ...m.names, 1: nm }; m.updated_at = new Date().toISOString();
       const s = series.get(m.series_id); if (s && !s.guest) { s.guest = uid; s.status = 'playing'; s.names = { ...s.names, 1: nm }; }
       return mview(m, uid);
     },
@@ -132,7 +151,7 @@ export function createFakeSupabase() {
       const names = { 0: m.names[my], 1: m.names[1 - my] };
       const ns = { id: uuid(), host: uid, guest: other, names, best_of: s ? s.best_of : 1, wins_host: 0, wins_guest: 0, match_no: 1, current_match: null, status: 'playing', winner_user: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       series.set(ns.id, ns);
-      const n = newMatch({ rules_version: a.p_rules_version, seed: 4321, config: m.config, names, host: uid, guest: other, status: 'playing', series_id: ns.id });
+      const n = newMatch({ rules_version: a.p_rules_version, seed: 4321, config: m.config, names, host: uid, looks: { 0: myLook(uid), 1: myLook(other) }, guest: other, status: 'playing', series_id: ns.id });
       ns.current_match = n.id;
       return mview(n, uid);
     },
@@ -219,5 +238,5 @@ export function createFakeSupabase() {
     const tok = 'tok-' + mail.uid + '-' + (++seq); users.set(tok, mail.uid);
     return `#access_token=${tok}&refresh_token=ref-${mail.uid}&expires_in=3600&token_type=bearer&type=${mail.kind}`;
   }
-  return { handle, matches, turns, series, events, pushes, notifies, accounts, mails, clickMail, dailyRows, install: (page) => page.route('**/*.supabase.co/**', handle) };
+  return { handle, matches, turns, series, events, pushes, notifies, accounts, mails, clickMail, dailyRows, profiles, install: (page) => page.route('**/*.supabase.co/**', handle) };
 }
