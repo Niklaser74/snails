@@ -61,9 +61,10 @@ export const snigelpost = {
   },
 
   // Team setup shared by every device in the match. Style is a local choice.
-  config(match, style) {
+  config(match, style, theme = 'auto') {
     return {
       seed: match.seed,
+      theme,
       rulesVersion: match.rules_version,
       snailsPerTeam: match.config.snailsPerTeam || 3,
       ...normalizeRules(match.config),
@@ -77,9 +78,9 @@ export const snigelpost = {
 
   // Build the Game for a match as seen from this device. Returns the game plus
   // the tick where the opponent's latest turn starts (for a visible replay).
-  buildGame(canvas, match, hooks, style) {
+  buildGame(canvas, match, hooks, style, theme = 'auto') {
     if (!rulesSupported(match.rules_version)) throw new Error('rules');
-    const cfg = this.config(match, style);
+    const cfg = this.config(match, style, theme);
     const myTeam = match.my_team;
     const turns = match.turns || [];
     const inputs = turns.flatMap((t) => t.inputs);

@@ -23,7 +23,8 @@ att göra det hållbart, roligare och till slut lönsamt.
 | Skalstöt (knuff) och Snigelhopp (teleport), åtta vapen totalt | |
 | Guide i första matchen | |
 | AI-nivåer: lätt, normal, svår | |
-| Tester i CI (Node + Playwright) | Terrängteman (trädgårdsland, strand, regnskog) |
+| Tester i CI (Node + Playwright) | |
+| Terrängteman: trädgårdsland, strand, regnskog, slumpat ur fröet eller valt i menyn | |
 | Förhandsbana vid sikte | Inställningar: dragtid, plötslig död, ljud av/på, gamepad |
 | Lagrat ljud: mastervolym, ljud av/på i HUD:en, lager av brus och toner | Inspelade ljud och musik |
 | Regler i menyn: dragtid, plötslig död; slow motion vid dödsskott | |

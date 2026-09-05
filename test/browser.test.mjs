@@ -124,10 +124,14 @@ await test('keyboard: walk, aim, pick grenade, charge and fire', async () => {
 
 await test('visuals: slime trail while crawling, cracks with damage, shards when a shell breaks', async () => {
   const { page, errors } = await open('/?seed=4242');
+  assert.equal(await page.inputValue('#opt-theme'), 'auto');
+  await page.selectOption('#opt-theme', 'beach');
   await page.selectOption('.team-row:nth-child(2) select', 'easy');
   await page.click('#btn-start');
   await page.waitForFunction(() => window.__game);
   await page.click('#tut-skip').catch(() => {});
+  assert.equal(await page.evaluate(() => __game.theme.id), 'beach');
+  assert.equal(JSON.parse(await page.evaluate(() => localStorage.getItem('snackmageddon.settings'))).theme, 'beach');
   assert.equal(await page.evaluate(() => __game.trail.length), 0);
   await page.keyboard.down('ArrowRight'); await ticks(page, 90); await page.keyboard.up('ArrowRight');
   const trail = await page.evaluate(() => __game.trail.length);

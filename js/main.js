@@ -44,6 +44,7 @@ const DEFAULT_STYLE = 'cartoon'; // vald standarddesign: Tecknad (Worms-stil)
 const settings = Object.assign({ teams: 2, per: 3, style: DEFAULT_STYLE, rows: [], lang: null, tutorialDone: false, ...DEFAULT_RULES, volume: 0.8, muted: false }, loadSettings());
 Object.assign(settings, normalizeRules(settings));
 settings.look = normalizeLook(settings.look);
+if (!['auto', 'garden', 'beach', 'jungle'].includes(settings.theme)) settings.theme = 'auto';
 settings.stats = settings.stats || {}; // last known stats from the server, for unlocks when offline
 profileState = { unlocked: unlockedFor(settings.stats, settings.extraUnlocked || []), stats: settings.stats, online: false };
 
@@ -149,6 +150,8 @@ let matchStats = null; // { t0, weapons } for the running match
 // ---------- menu ----------
 $('opt-teams').value = settings.teams;
 $('opt-per').value = settings.per;
+$('opt-theme').value = settings.theme;
+$('opt-theme').addEventListener('change', () => { settings.theme = $('opt-theme').value; saveSettings(settings); });
 // rules: turn time and sudden death
 for (const v of TURN_TIMES) $('opt-turntime').append(new Option(t('menu.seconds', { n: v }), v));
 for (const v of SUDDEN_DEATHS) $('opt-sudden').append(new Option(v === 0 ? t('menu.suddenOff') : t('menu.suddenAfter', { n: v }), v));
@@ -203,7 +206,7 @@ function readConfig() {
   const rules = readRules();
   saveSettings(settings);
   for (const r of rows) if (!r.ai) r.look = settings.look;
-  return { teams: rows, snailsPerTeam: settings.per, style: settings.style, ...rules };
+  return { teams: rows, snailsPerTeam: settings.per, style: settings.style, theme: settings.theme, ...rules };
 }
 
 let starting = false;
@@ -268,6 +271,7 @@ function startDaily() {
   dailyGame = { key, t0: Date.now() };
   const cfg = dailyConfig(key, settings.style, { me: playerName() === t('online.defaultName') ? t('daily.you') : playerName(), targets: t('daily.targets') });
   cfg.teams[0].look = settings.look;
+  cfg.theme = settings.theme;
   game = new Game(canvas, cfg, {
     onGameOver: async () => {
       const score = game.daily.score;
@@ -639,7 +643,7 @@ function startOnlineGame(m) {
     },
     onTurn: () => { camDrag.active = false; },
   };
-  const { game: g, myTeam, replayFrom } = snigelpost.buildGame(canvas, m, hooks, settings.style);
+  const { game: g, myTeam, replayFrom } = snigelpost.buildGame(canvas, m, hooks, settings.style, settings.theme);
   onlineMatch = { id: m.id, myTeam, startTick: m.tick_count, match: m, pending: null };
   game = g;
   window.__game = g;

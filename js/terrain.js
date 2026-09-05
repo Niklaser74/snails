@@ -3,9 +3,11 @@
 // every device. The canvas is only a picture of the mask and is skipped in
 // headless mode (Node, tests, server-side verification).
 import { dsin } from './dmath.js';
+import { THEMES, paintDecorations } from './themes.js';
 
 export class Terrain {
-  constructor(width, height, rng, { headless = false } = {}) {
+  constructor(width, height, rng, { headless = false, theme = THEMES.garden } = {}) {
+    this.theme = theme;
     this.w = width;
     this.h = height;
     this.rng = rng;
@@ -65,11 +67,12 @@ export class Terrain {
 
   paintBase() {
     const { ctx, w, h, rng } = this;
+    const th = this.theme;
     ctx.clearRect(0, 0, w, h);
     const g = ctx.createLinearGradient(0, h * 0.25, 0, h);
-    g.addColorStop(0, '#8b5a34');
-    g.addColorStop(0.5, '#6e4324');
-    g.addColorStop(1, '#4a2c16');
+    g.addColorStop(0, th.soil[0]);
+    g.addColorStop(0.5, th.soil[1]);
+    g.addColorStop(1, th.soil[2]);
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.moveTo(0, h);
@@ -78,13 +81,13 @@ export class Terrain {
     ctx.closePath();
     ctx.fill();
     // speckles use Math.random on purpose: purely decorative, must not touch the sim rng
-    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.fillStyle = th.speckle;
     for (let i = 0; i < w * 0.6; i++) {
       const x = Math.random() * w;
       const top = this.heights[Math.floor(x)];
       ctx.fillRect(x, top + Math.random() * (h - top), 2 + Math.random() * 3, 1 + Math.random() * 2);
     }
-    ctx.fillStyle = 'rgba(255,220,160,0.10)';
+    ctx.fillStyle = th.glint;
     for (let i = 0; i < w * 0.3; i++) {
       const x = Math.random() * w;
       const top = this.heights[Math.floor(x)];
@@ -92,16 +95,17 @@ export class Terrain {
     }
     // grass: drawn from the height line downward so the picture matches the mask
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#3f8f3b';
+    ctx.strokeStyle = th.edge[0];
     ctx.lineWidth = 8;
     ctx.beginPath();
     for (let x = 0; x < w; x++) x === 0 ? ctx.moveTo(x, this.heights[x] + 4) : ctx.lineTo(x, this.heights[x] + 4);
     ctx.stroke();
-    ctx.strokeStyle = '#6cc25a';
+    ctx.strokeStyle = th.edge[1];
     ctx.lineWidth = 3;
     ctx.beginPath();
     for (let x = 0; x < w; x++) x === 0 ? ctx.moveTo(x, this.heights[x] + 1.5) : ctx.lineTo(x, this.heights[x] + 1.5);
     ctx.stroke();
+    paintDecorations(ctx, th, this.heights, w);
     void rng;
   }
 
@@ -119,9 +123,9 @@ export class Terrain {
     }
     if (this.ctx) {
       const ctx = this.ctx;
-      ctx.fillStyle = '#6e4324';
+      ctx.fillStyle = this.theme.island[0];
       ctx.beginPath(); ctx.ellipse(cx, yc, rw, ry, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#5bb04f';
+      ctx.fillStyle = this.theme.island[1];
       ctx.beginPath(); ctx.ellipse(cx, cy + 2, rw, 6, 0, 0, Math.PI * 2); ctx.fill();
     }
   }

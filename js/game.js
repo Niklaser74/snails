@@ -1,4 +1,5 @@
 import { Terrain } from './terrain.js';
+import { themeFor } from './themes.js';
 import { drawSnail, shade } from './snails.js';
 import { sfx } from './audio.js';
 import { mulberry32, shuffle, Hasher } from './rng.js';
@@ -132,7 +133,8 @@ export class Game {
     this.rng = mulberry32(this.seed); // simulation only
     this.airng = mulberry32(this.seed ^ 0x2545f491); // AI decisions (recorded as inputs, never touches the sim rng)
     this.vrng = mulberry32(this.seed ^ 0x5bd1e995); // visuals only
-    this.terrain = new Terrain(this.W, this.H, this.rng, { headless: this.headless });
+    this.theme = themeFor(this.seed, config.theme); // visual only
+    this.terrain = new Terrain(this.W, this.H, this.rng, { headless: this.headless, theme: this.theme });
     this.waterY = this.H - 42;
     this.time = 0;
     this.tickCount = 0;
@@ -1248,14 +1250,15 @@ export class Game {
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     // sky
+    const th = this.theme;
     const sky = ctx.createLinearGradient(0, 0, 0, ch);
-    sky.addColorStop(0, '#5fb0ea');
-    sky.addColorStop(0.6, '#bfe3ff');
-    sky.addColorStop(1, '#f6e6c8');
+    sky.addColorStop(0, th.sky[0]);
+    sky.addColorStop(0.6, th.sky[1]);
+    sky.addColorStop(1, th.sky[2]);
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, cw, ch);
     // sun
-    ctx.fillStyle = 'rgba(255,240,180,0.9)';
+    ctx.fillStyle = th.sun;
     ctx.beginPath(); ctx.arc(cw * 0.82, ch * 0.16, 36, 0, Math.PI * 2); ctx.fill();
 
     const shx = this.shake ? (this.vrng() - 0.5) * this.shake : 0;
@@ -1263,10 +1266,10 @@ export class Game {
     const ox = cw / 2 - cam.x * cam.zoom + shx, oy = ch / 2 - cam.y * cam.zoom + shy;
 
     // parallax hills
-    this.drawHills(ctx, cw, ch, ox * 0.25, oy * 0.25, '#9fcfe8', 0.5);
-    this.drawHills(ctx, cw, ch, ox * 0.5, oy * 0.5, '#7fb98a', 0.62);
+    this.drawHills(ctx, cw, ch, ox * 0.25, oy * 0.25, th.hills[0], 0.5);
+    this.drawHills(ctx, cw, ch, ox * 0.5, oy * 0.5, th.hills[1], 0.62);
     // clouds
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillStyle = th.cloud;
     for (const c of this.clouds) {
       const x = c.x * cam.zoom * 0.6 + ox * 0.6, y = c.y * cam.zoom * 0.6 + oy * 0.6;
       const r = 18 * c.s * cam.zoom;
@@ -1285,7 +1288,7 @@ export class Game {
     // slime trail: glossy dabs that dry out over a few seconds
     for (const p of this.trail) {
       const a = Math.min(1, p.life / 4) * 0.5;
-      ctx.fillStyle = `rgba(190,255,150,${a})`;
+      ctx.fillStyle = `rgba(${th.slime},${a})`;
       ctx.beginPath(); ctx.ellipse(p.x, p.y, p.w, 2, 0, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = `rgba(255,255,255,${a * 0.6})`;
       ctx.beginPath(); ctx.ellipse(p.x - p.w * 0.3, p.y - 0.8, p.w * 0.35, 0.8, 0, 0, Math.PI * 2); ctx.fill();
@@ -1527,7 +1530,7 @@ export class Game {
   drawWater(ctx) {
     const y0 = this.waterY;
     for (let layer = 0; layer < 2; layer++) {
-      ctx.fillStyle = layer === 0 ? 'rgba(40,120,220,0.55)' : 'rgba(30,90,200,0.55)';
+      ctx.fillStyle = this.theme.water[layer];
       ctx.beginPath();
       ctx.moveTo(-50, this.H + 50);
       for (let x = -50; x <= this.W + 50; x += 12) {

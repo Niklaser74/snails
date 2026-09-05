@@ -8,6 +8,7 @@ import { Game, RULES_VERSION, SUPPORTED_RULES, weaponsFor } from '../js/game.js'
 import { dailyConfig, seedFor, weaponFor, dayKey } from '../js/daily.js';
 import { unlockedFor, normalizeLook, SHELLS, HATS } from '../js/cosmetics.js';
 import { tierFor, elo, seasonKey, daysLeft, TIERS } from '../js/season.js';
+import { themeFor, THEME_IDS } from '../js/themes.js';
 
 const cfg = (seed) => ({
   seed,
@@ -419,6 +420,19 @@ test('season: quarter keys, Elo mirror of the server, tiers', () => {
   assert.ok(elo(1200, 1000, 0).host - 1200 < 16, 'a favourite gains less');
   assert.equal(tierFor(1000), 'garden'); assert.equal(tierFor(900), 'slug'); assert.equal(tierFor(1300), 'giant');
   assert.ok(TIERS.every((x, i) => i === 0 || x.min > TIERS[i - 1].min));
+});
+
+test('terrain themes: picked from the seed, never part of the simulation', () => {
+  assert.deepEqual(THEME_IDS, ['garden', 'beach', 'jungle']);
+  assert.equal(themeFor(1234).id, themeFor(1234).id);
+  assert.equal(themeFor(0).id, 'garden'); assert.equal(themeFor(1).id, 'beach'); assert.equal(themeFor(2).id, 'jungle');
+  assert.equal(themeFor(1234, 'beach').id, 'beach');
+  assert.equal(themeFor(1234, 'nonsense').id, themeFor(1234).id);
+  const a = new Game(null, { ...cfg(99), theme: 'jungle' }), b = new Game(null, { ...cfg(99), theme: 'beach' });
+  assert.equal(a.theme.id, 'jungle'); assert.equal(b.theme.id, 'beach');
+  run(a, 60 * 60); run(b, 60 * 60);
+  assert.equal(a.stateHash(), b.stateHash(), 'the theme changed the simulation');
+  assert.equal(a.recording.theme, undefined);
 });
 
 test('turn time and sudden death are match rules that travel with the recording', () => {
