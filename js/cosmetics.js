@@ -82,6 +82,28 @@ export function drawShellPattern(ctx, look, teamColor) {
   if (p === 'gold' || p === 'flame') { ctx.strokeStyle = teamColor; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(SHELL.x, SHELL.y, SHELL.r - 1.2, 0, Math.PI * 2); ctx.stroke(); }
 }
 
+// Cracks in the shell as the snail takes damage: one below 70 hp, two below
+// 45, a missing chip below 25. Visual only.
+export function drawCracks(ctx, hp, outline = '#3a2210') {
+  if (hp == null || hp >= 70) return;
+  const { x, y } = SHELL;
+  ctx.save();
+  ctx.strokeStyle = outline; ctx.lineWidth = 1.3; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x + 2, y - 12); ctx.lineTo(x - 1, y - 6); ctx.lineTo(x + 3, y - 2); ctx.lineTo(x + 1, y + 3); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x - 1, y - 6); ctx.lineTo(x - 5, y - 4); ctx.stroke();
+  if (hp < 45) {
+    ctx.beginPath(); ctx.moveTo(x - 12, y - 2); ctx.lineTo(x - 7, y + 1); ctx.lineTo(x - 8, y + 6); ctx.lineTo(x - 3, y + 9); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - 7, y + 1); ctx.lineTo(x - 3, y - 1); ctx.stroke();
+  }
+  if (hp < 25) {
+    // a chip missing at the rim: shows the soft body underneath
+    ctx.fillStyle = '#e0a878';
+    ctx.beginPath(); ctx.moveTo(x + 9, y - 10); ctx.lineTo(x + 13, y - 6); ctx.lineTo(x + 12, y - 1); ctx.lineTo(x + 7, y - 4); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 7, y - 4); ctx.lineTo(x + 3, y + 4); ctx.stroke();
+  }
+  ctx.restore();
+}
+
 export function drawHat(ctx, look, outline = '#4a2e1c') {
   const h = look?.hat || 'none';
   if (h === 'none') return;

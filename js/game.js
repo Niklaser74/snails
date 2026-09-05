@@ -160,6 +160,8 @@ export class Game {
     this.pendingBooms = [];
     this.markerX = 0;
     this.particles = [];
+    this.trail = []; // slime left by crawling snails (visual only)
+    this.trailLast = {}; // snail id -> last trail point
     this.popups = [];
     this.shake = 0;
     this.slowmo = 0; // seconds of slow motion left (visual only, never hashed)
@@ -474,11 +476,27 @@ export class Game {
     this.prevFire = this.frame.fire;
   }
 
+  // A glossy dab of slime under a crawling snail every few pixels (visual only).
+  leaveSlime(s) {
+    const last = this.trailLast[s.id];
+    if (last && Math.abs(last.x - s.x) < 4 && Math.abs(last.y - s.y) < 4) return;
+    const p = { x: s.x, y: s.y + 1, life: 9, w: 5 + (s.id % 3) };
+    this.trail.push(p);
+    this.trailLast[s.id] = p;
+    if (this.trail.length > 700) this.trail.shift();
+  }
+
   killSnail(s) {
     s.alive = false;
     s.hp = 0;
     this.say({ key: 'msg.cracked', name: s.name }, 1.5);
     sfx.cracked();
+    // the shell breaks into shards that fly off (visual only)
+    if (!this.headless) for (let i = 0; i < 8; i++) {
+      const a = -Math.PI * (0.15 + this.vrng() * 0.7), sp = 140 + this.vrng() * 220;
+      this.particles.push({ x: s.x - 6, y: s.y - 15, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1.1 + this.vrng() * 0.6, grav: 1, fade: true,
+        shard: 4 + this.vrng() * 5, rot: this.vrng() * 6.28, spin: (this.vrng() - 0.5) * 14, color: s.color });
+    }
     this.explosion(s.x, s.y - 8, 30, 28, null);
     this.cam.target = s;
   }
@@ -508,6 +526,7 @@ export class Game {
             s.walking = true;
             s.walkAcc += WALK * dt;
             while (s.walkAcc >= 1) { s.walkAcc -= 1; if (!this.stepSnail(s, dir)) { s.walkAcc = 0; break; } }
+            if (!this.headless) this.leaveSlime(s);
           }
         }
       }
@@ -899,7 +918,9 @@ export class Game {
       if (p.grav) p.vy += G * 0.6 * dt;
       p.x += p.vx * dt; p.y += p.vy * dt;
       if (p.grow) p.r += p.grow * 8 * dt;
+      if (p.shard) { p.rot += p.spin * dt; if (this.terrain.solid(p.x, p.y)) { p.vx *= 0.5; p.vy = -Math.abs(p.vy) * 0.3; p.spin *= 0.5; p.y -= 1; } }
     }
+    if (!this.headless) for (let i = this.trail.length - 1; i >= 0; i--) { this.trail[i].life -= dt; if (this.trail[i].life <= 0) this.trail.splice(i, 1); }
     for (let i = this.popups.length - 1; i >= 0; i--) {
       const p = this.popups[i];
       p.life -= dt; p.y -= 30 * dt;
@@ -1261,10 +1282,18 @@ export class Game {
     ctx.scale(cam.zoom, cam.zoom);
     ctx.drawImage(this.terrain.canvas, 0, 0);
 
+    // slime trail: glossy dabs that dry out over a few seconds
+    for (const p of this.trail) {
+      const a = Math.min(1, p.life / 4) * 0.5;
+      ctx.fillStyle = `rgba(190,255,150,${a})`;
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, p.w, 2, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(255,255,255,${a * 0.6})`;
+      ctx.beginPath(); ctx.ellipse(p.x - p.w * 0.3, p.y - 0.8, p.w * 0.35, 0.8, 0, 0, Math.PI * 2); ctx.fill();
+    }
     // snails
     for (const s of this.snails) {
       if (!s.alive) { drawSnail(ctx, this.style, { x: s.x, y: s.y, facing: s.facing, color: s.color, t: this.time, dead: true, scale: SNAIL_SCALE }); continue; }
-      drawSnail(ctx, this.style, { x: s.x, y: s.y, facing: s.facing, color: s.color, t: this.time + s.id, walking: s.walking, aim: s === this.active ? s.aim : 0, scale: SNAIL_SCALE, look: this.teams[s.team].look });
+      drawSnail(ctx, this.style, { x: s.x, y: s.y, facing: s.facing, color: s.color, t: this.time + s.id, walking: s.walking, aim: s === this.active ? s.aim : 0, scale: SNAIL_SCALE, look: this.teams[s.team].look, hp: s.hp });
       // label
       ctx.font = 'bold 10px system-ui, sans-serif';
       ctx.textAlign = 'center';
@@ -1444,6 +1473,16 @@ export class Game {
       }
       ctx.globalAlpha = p.fade ? Math.min(1, p.life) : 1;
       ctx.fillStyle = p.color;
+      if (p.shard) {
+        // a piece of shell: a small triangle with a cream inside
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+        ctx.beginPath(); ctx.moveTo(-p.shard, p.shard * 0.6); ctx.lineTo(p.shard, p.shard * 0.4); ctx.lineTo(0, -p.shard); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#4a2e1c'; ctx.lineWidth = 1; ctx.stroke();
+        ctx.fillStyle = '#fff3d6'; ctx.beginPath(); ctx.moveTo(-p.shard * 0.4, p.shard * 0.3); ctx.lineTo(p.shard * 0.4, p.shard * 0.2); ctx.lineTo(0, -p.shard * 0.4); ctx.closePath(); ctx.fill();
+        ctx.restore();
+        ctx.globalAlpha = 1;
+        continue;
+      }
       ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
     }

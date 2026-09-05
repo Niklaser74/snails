@@ -17,7 +17,8 @@ att göra det hållbart, roligare och till slut lönsamt.
 ### Fas 1 – Känsla och kärnloop
 | Klart | Kvar |
 |---|---|
-| Kamerapunch vid explosioner, slow motion vid dödsskott | Skal som spricker, slemspår |
+| Kamerapunch vid explosioner, slow motion vid dödsskott | |
+| Skal som spricker med skadan, skalbitar vid död, slemspår efter kryp | |
 | Slemklot, Saltregn, ammunition, lådor | |
 | Skalstöt (knuff) och Snigelhopp (teleport), åtta vapen totalt | |
 | Guide i första matchen | |

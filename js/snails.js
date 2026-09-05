@@ -12,8 +12,9 @@
 //     aim,           aim angle in radians (eye direction), optional
 //     dead,          draw as a gravestone-ish empty shell
 //     look,          cosmetics { shell, hat } (js/cosmetics.js), optional
+//     hp,            health 0–100: cracks appear below 70, optional
 //   })
-import { drawShellPattern, drawHat } from './cosmetics.js';
+import { drawShellPattern, drawHat, drawCracks } from './cosmetics.js';
 
 export const SNAIL_STYLES = [
   {
@@ -515,10 +516,9 @@ export function drawSnail(ctx, style, o) {
       case 'flat': drawFlat(ctx, o); break;
       default: drawCartoon(ctx, o, false);
     }
-    if (o.look) {
-      if (style === 'cartoon' || style === 'flat') drawShellPattern(ctx, o.look, o.color);
-      drawHat(ctx, o.look);
-    }
+    if (o.look && (style === 'cartoon' || style === 'flat')) drawShellPattern(ctx, o.look, o.color);
+    if (style === 'cartoon' || style === 'flat' || style === 'kommando') drawCracks(ctx, o.hp);
+    if (o.look) drawHat(ctx, o.look);
   }
   ctx.restore();
 }

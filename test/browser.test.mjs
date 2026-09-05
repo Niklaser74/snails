@@ -122,6 +122,31 @@ await test('keyboard: walk, aim, pick grenade, charge and fire', async () => {
   await page.close();
 });
 
+await test('visuals: slime trail while crawling, cracks with damage, shards when a shell breaks', async () => {
+  const { page, errors } = await open('/?seed=4242');
+  await page.selectOption('.team-row:nth-child(2) select', 'easy');
+  await page.click('#btn-start');
+  await page.waitForFunction(() => window.__game);
+  await page.click('#tut-skip').catch(() => {});
+  assert.equal(await page.evaluate(() => __game.trail.length), 0);
+  await page.keyboard.down('ArrowRight'); await ticks(page, 90); await page.keyboard.up('ArrowRight');
+  const trail = await page.evaluate(() => __game.trail.length);
+  assert.ok(trail >= 3, `expected slime after crawling, got ${trail}`);
+  // cracks: rendering a damaged snail must not throw, and the shell shows cracks below 70
+  await page.evaluate(() => { __game.active.hp = 20; __game.render(); });
+  // a kill sends shards flying (visual particles), the state hash stays what the simulation says
+  const before = await page.evaluate(() => __game.stateHash());
+  const shards = await page.evaluate(() => { const g = __game; const v = g.snails.find((s) => s.alive && s !== g.active); g.killSnail(v); return g.particles.filter((p) => p.shard).length; });
+  assert.equal(shards, 8);
+  await page.evaluate(() => __game.render());
+  assert.notEqual(await page.evaluate(() => __game.stateHash()), before, 'the kill itself is simulation');
+  const nodeHash = await page.evaluate(() => { const g = __game; for (let i = 0; i < 120; i++) g.tick(); return g.stateHash(); });
+  assert.ok(nodeHash.length > 0);
+  await page.screenshot({ path: path.join(outDir, 'visuals.png') });
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
 await test('AI vs AI in the browser matches the headless Node simulation', async () => {
   const seed = 20260904;
   const { page, errors } = await open(`/?seed=${seed}`);
