@@ -43,7 +43,8 @@ att göra det hållbart, roligare och till slut lönsamt.
 |---|---|
 | Dagens skott: samma bana och vapen för alla per dag, ett skott, topplista, bästa försöket räknas | Betalning för premiumkosmetik (guldskal, cylinder) |
 | Profil: namn, statistik, skalmönster och hattar; låses upp med vinster och Dagens skott; syns för motståndaren | |
-| Rank (Elo per kvartalssäsong, fem nivåer) och säsongspoäng för Dagens skott, topplistor i menyn | Säsongsbelöningar (kosmetik till topp tre) |
+| Rank (Elo per kvartalssäsong, fem nivåer) och säsongspoäng för Dagens skott, topplistor i menyn | |
+| Säsongsbelöningar: lagerkrans och konfettiskal till topp tre, märken i profilen, delas ut av pg_cron vid kvartalsskiftet | |
 | Betalning: Stripe Checkout via edge-funktioner, webhook ger köpet, kräver e-postkopplat konto | Stripe-konto, produkter och hemligheter (se `supabase/README.md`) |
 | E-postkoppling (fas 2) som grund | |
 | | Serversidig verifiering av dagens skott (inspelningen sparas redan) |
@@ -110,8 +111,8 @@ daglig återkomst utan att kräva kosmetik.~~ Dagens skott klart 2026-09-05. Pro
 premiumsaker ligger låsta som "kommer snart" tills betalning finns (Stripe
 eller butikernas köp, kräver e-postkopplat konto).
 Rank och säsonger klart 2026-09-05. Betalningsflödet klart 2026-09-05, väntar
-på Stripe-konto och nycklar.
-Nästa: säsongsbelöningar.
+på Stripe-konto och nycklar. Säsongsbelöningar klart 2026-09-05. Fas 3 är
+därmed byggd; kvar är Stripe-nycklarna och det som ligger i fas 1 och 4.
 
 ## Risker
 

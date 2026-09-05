@@ -10,6 +10,7 @@ export function createFakeSupabase() {
   const profiles = new Map(); // uid -> { name, look }
   const purchases = new Map(); // uid -> Set(item)
   const checkouts = []; // calls to the buy function
+  const awards = []; // { season, uid, kind, place, item, value }
   const ratings = new Map(); // `${season}/${uid}` -> { rating, games, wins, losses, draws, updated }
   const seasonKey = () => { const d = new Date(); return `${d.getUTCFullYear()}-Q${Math.floor(d.getUTCMonth() / 3) + 1}`; };
   const rateMatch = (m) => {
@@ -32,7 +33,7 @@ export function createFakeSupabase() {
     const mine = [...dailyRows.values()].filter((r) => r.uid === uid);
     return { matches: fin.length, wins, losses, dailyBest: Math.max(0, ...mine.map((r) => r.score)), dailyPlays: mine.reduce((a, r) => a + r.attempts, 0) };
   };
-  const unlockedFor = (uid) => { const st = statsFor(uid), u = [...FREE]; if (st.dailyBest >= 250) u.push('stars'); if (st.wins >= 5) u.push('flame'); if (st.wins >= 10) u.push('crown'); if (st.dailyBest >= 350) u.push('viking'); return u.concat([...(purchases.get(uid) || [])]); };
+  const unlockedFor = (uid) => { const st = statsFor(uid), u = [...FREE]; if (st.dailyBest >= 250) u.push('stars'); if (st.wins >= 5) u.push('flame'); if (st.wins >= 10) u.push('crown'); if (st.dailyBest >= 350) u.push('viking'); return u.concat([...(purchases.get(uid) || [])], awards.filter((a) => a.uid === uid).map((a) => a.item)); };
   const cleanLook = (look, u) => ({ shell: u.includes(look?.shell) ? look.shell : 'spiral', hat: u.includes(look?.hat) ? look.hat : 'none' });
   const myLook = (uid) => profiles.get(uid)?.look || {};
   const matches = new Map();
@@ -73,7 +74,7 @@ export function createFakeSupabase() {
 
   const rpc = {
     snails_supported_rules() { return supportedRules; },
-    snails_profile(uid) { const p = profiles.get(uid); const r = ratings.get(`${seasonKey()}/${uid}`); return { name: p?.name || '', look: p?.look || {}, stats: { ...statsFor(uid), rating: r?.rating ?? 1000, seasonGames: r?.games ?? 0, season: seasonKey() }, unlocked: unlockedFor(uid), canBuy: !!accounts.get(uid)?.email, purchases: [...(purchases.get(uid) || [])] }; },
+    snails_profile(uid) { const p = profiles.get(uid); const r = ratings.get(`${seasonKey()}/${uid}`); return { name: p?.name || '', look: p?.look || {}, stats: { ...statsFor(uid), rating: r?.rating ?? 1000, seasonGames: r?.games ?? 0, season: seasonKey() }, unlocked: unlockedFor(uid), canBuy: !!accounts.get(uid)?.email, purchases: [...(purchases.get(uid) || [])], awards: awards.filter((a) => a.uid === uid).map((a) => ({ season: a.season, kind: a.kind, place: a.place, item: a.item, value: a.value })) }; },
     snails_season(uid) {
       const sk = seasonKey();
       const rows = [...ratings.values()].filter((r, i, all) => [...ratings.keys()][i].startsWith(sk + '/')).sort((a, b) => b.rating - a.rating || a.updated - b.updated);
@@ -88,6 +89,7 @@ export function createFakeSupabase() {
           me: me ? { rating: me.rating, games: me.games, wins: me.wins, losses: me.losses, draws: me.draws, rank: rows.indexOf(me) + 1 } : null },
         daily: { total: drows.length, top: drows.slice(0, 10).map((r) => ({ name: r.name, points: r.pts, days: r.days, me: r.uid === uid })),
           me: dme ? { points: dme.pts, days: dme.days, rank: drows.indexOf(dme) + 1 } : null },
+        last: { season: '2026-Q2', awards: awards.filter((a) => a.season === '2026-Q2').map((a) => ({ kind: a.kind, place: a.place, name: profiles.get(a.uid)?.name || a.uid, value: a.value, me: a.uid === uid })) },
       };
     },
     snails_profile_set(uid, a) {
@@ -281,5 +283,5 @@ export function createFakeSupabase() {
     const tok = 'tok-' + mail.uid + '-' + (++seq); users.set(tok, mail.uid);
     return `#access_token=${tok}&refresh_token=ref-${mail.uid}&expires_in=3600&token_type=bearer&type=${mail.kind}`;
   }
-  return { handle, matches, turns, series, events, pushes, notifies, accounts, mails, clickMail, dailyRows, profiles, ratings, purchases, checkouts, grant: (uid, item) => { if (!purchases.has(uid)) purchases.set(uid, new Set()); purchases.get(uid).add(item); }, install: (page) => page.route('**/*.supabase.co/**', handle) };
+  return { handle, matches, turns, series, events, pushes, notifies, accounts, mails, clickMail, dailyRows, profiles, ratings, purchases, checkouts, awards, grant: (uid, item) => { if (!purchases.has(uid)) purchases.set(uid, new Set()); purchases.get(uid).add(item); }, install: (page) => page.route('**/*.supabase.co/**', handle) };
 }

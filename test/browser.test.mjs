@@ -486,9 +486,9 @@ await test('account: link an e-mail, then sign in with a login link on another d
 
 await test('profile: pick a look, locked items stay locked, the look shows up in matches', async () => {
   const { page, errors } = await open('/?seed=4242');
-  await page.waitForFunction(() => document.querySelectorAll('#pick-shell button').length === 6 && document.querySelectorAll('#pick-hat button').length === 6);
+  await page.waitForFunction(() => document.querySelectorAll('#pick-shell button').length === 7 && document.querySelectorAll('#pick-hat button').length === 7);
   assert.equal(await page.locator('#pick-shell button.sel').getAttribute('data-id'), 'spiral');
-  assert.equal(await page.locator('#pick-hat button.locked').count(), 3, 'crown, viking and top hat are locked at first');
+  assert.equal(await page.locator('#pick-hat button.locked').count(), 4, 'crown, viking, top hat and laurel are locked at first');
   assert.equal(await page.locator('#pick-hat button[data-id=crown]').isDisabled(), true);
   assert.match(await page.locator('#pick-hat button[data-id=crown]').textContent(), /10 wins|10 vinster/);
   assert.match(await page.locator('#pick-shell button[data-id=gold]').textContent(), /Link an e-mail first|Koppla e-post först/);
@@ -519,9 +519,41 @@ await test('profile: pick a look, locked items stay locked, the look shows up in
   await page.close();
 });
 
+await test('season awards: badges in the profile, the item unlocks, last season shows the winners', async () => {
+  const { page, errors } = await open('/');
+  await page.waitForFunction(() => document.querySelectorAll('#pick-hat button').length === 7 && document.querySelectorAll('#pick-shell button').length === 7);
+  const laurel = page.locator('#pick-hat button[data-id=laurel]');
+  assert.equal(await laurel.isDisabled(), true);
+  assert.match(await laurel.textContent(), /Top 3 in rating|Topp 3 i rating/);
+  assert.equal(await page.locator('#profile-awards').isHidden(), true);
+  assert.match(await page.locator('#season-last').textContent(), /No rewards|inga belöningar/);
+  // the season closer hands this player a laurel wreath (2nd in rating) and someone else the confetti shell
+  const uid = [...fake.accounts.keys()].pop();
+  fake.profiles.set('other', { name: 'Eva', look: {} });
+  fake.awards.push({ season: '2026-Q2', uid, kind: 'rank', place: 2, item: 'laurel', value: 1090 }, { season: '2026-Q2', uid: 'other', kind: 'daily', place: 1, item: 'confetti', value: 1240 });
+  await page.reload();
+  await page.waitForFunction(() => !document.getElementById('profile-awards').hidden);
+  assert.match(await page.locator('#profile-awards').textContent(), /2026-Q2: #2 in rating \(1090\)|2026-Q2: 2:a i rating \(1090\)/);
+  assert.equal(await laurel.isDisabled(), false);
+  assert.equal(await page.locator('#pick-shell button[data-id=confetti]').isDisabled(), true, 'the other award stays locked');
+  await laurel.click();
+  await page.waitForFunction(() => document.querySelector('#pick-hat button.sel')?.dataset.id === 'laurel');
+  await until(() => [...fake.profiles.values()].some((p) => p.look.hat === 'laurel'), 'laurel not saved');
+  await page.waitForFunction(() => /2026-Q2/.test(document.getElementById('season-last').textContent));
+  assert.match(await page.locator('#season-last').textContent(), /Eva · (shot of the day|Dagens skott) 1240/);
+  assert.match(await page.locator('#season-rewards').textContent(), /laurel wreath|lagerkransen/);
+  // a game draws the awarded hat on the player's snails
+  await page.selectOption('.team-row:nth-child(2) select', 'easy');
+  await page.click('#btn-start');
+  await page.waitForFunction(() => window.__game);
+  assert.equal(await page.evaluate(() => __game.teams[0].look.hat), 'laurel');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
 await test('buying premium cosmetics: needs a linked e-mail, starts Checkout, unlocks on return', async () => {
   const { page, errors } = await open('/');
-  await page.waitForFunction(() => document.querySelectorAll('#pick-shell button').length === 6);
+  await page.waitForFunction(() => document.querySelectorAll('#pick-shell button').length === 7);
   // anonymous: premium is locked with a hint to link an e-mail first
   const gold = page.locator('#pick-shell button[data-id=gold]');
   assert.equal(await gold.isDisabled(), true);

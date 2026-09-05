@@ -45,7 +45,7 @@ const settings = Object.assign({ teams: 2, per: 3, style: DEFAULT_STYLE, rows: [
 Object.assign(settings, normalizeRules(settings));
 settings.look = normalizeLook(settings.look);
 settings.stats = settings.stats || {}; // last known stats from the server, for unlocks when offline
-profileState = { unlocked: unlockedFor(settings.stats), stats: settings.stats, online: false };
+profileState = { unlocked: unlockedFor(settings.stats, settings.extraUnlocked || []), stats: settings.stats, online: false };
 
 // ---------- sound ----------
 setVolume(settings.volume);
@@ -345,6 +345,12 @@ async function renderSeason() {
     fillBoard('season-daily', s.daily.top, (r) => `${r.points} p`);
     $('season-rank-me').textContent = s.rank.me ? t('season.rankMe', { tier: t('tier.' + tierFor(s.rank.me.rating)), rating: s.rank.me.rating, rank: s.rank.me.rank, total: s.rank.total, games: s.rank.me.games }) : (s.rank.top.length ? t('season.rankNone') : t('season.empty'));
     $('season-daily-me').textContent = s.daily.me ? t('season.dailyMe', { points: s.daily.me.points, days: s.daily.me.days, rank: s.daily.me.rank, total: s.daily.total }) : (s.daily.top.length ? t('season.dailyNone') : t('season.empty'));
+    const last = $('season-last');
+    last.innerHTML = '';
+    if (s.last?.awards?.length) {
+      last.append(t('season.last', { season: s.last.season }) + ' ');
+      for (const a of s.last.awards) { const b = document.createElement('span'); b.className = 'badge'; b.textContent = `${a.place === 1 ? '🏆' : a.place === 2 ? '🥈' : '🥉'} ${a.name} · ${t(a.kind === 'rank' ? 'season.kindRank' : 'season.kindDaily')} ${a.value}`; last.appendChild(b); }
+    } else if (s.last) last.textContent = t('season.lastNone', { season: s.last.season });
     st.textContent = '';
   } catch (e) { st.textContent = t('online.error', { msg: e.message }); }
 }
@@ -352,6 +358,7 @@ async function renderSeason() {
 // ---------- profile: stats and look ----------
 function needText(c) {
   if (c.premium) return t('cos.premium');
+  if (c.award) return t(c.award === 'rank' ? 'cos.awardRank' : 'cos.awardDaily');
   if (c.need?.wins) return t('cos.needWins', { n: c.need.wins });
   if (c.need?.dailyBest) return t('cos.needDaily', { n: c.need.dailyBest });
   return '';
@@ -387,6 +394,13 @@ function renderProfile() {
   const st = profileState.stats || {};
   const rank = profileState.online && st.rating ? t('profile.rank', { tier: t('tier.' + tierFor(st.rating)), rating: st.rating }) + ' ' : '';
   $('profile-stats').textContent = (profileState.online ? t('profile.stats', { wins: st.wins || 0, losses: st.losses || 0, best: st.dailyBest || 0, plays: st.dailyPlays || 0 }) + ' ' + rank : '') + t('profile.local');
+  const aw = $('profile-awards'), awards = profileState.awards || [];
+  aw.hidden = !awards.length;
+  aw.innerHTML = '';
+  if (awards.length) {
+    aw.append(t('profile.awards') + ' ');
+    for (const a of awards) { const b = document.createElement('span'); b.className = 'badge'; b.textContent = (a.place === 1 ? '🏆 ' : a.place === 2 ? '🥈 ' : '🥉 ') + t(a.kind === 'rank' ? 'award.rank' : 'award.daily', { season: a.season, place: a.place, value: a.value }); aw.appendChild(b); }
+  }
   renderPicker('pick-shell', SHELLS, 'shell');
   renderPicker('pick-hat', HATS, 'hat');
 }
@@ -394,8 +408,9 @@ async function loadProfile() {
   if (!snigelpost.available()) { renderProfile(); return; }
   try {
     const p = await snigelpost.profile();
-    profileState = { unlocked: p.unlocked, stats: p.stats, online: true, canBuy: !!p.canBuy };
+    profileState = { unlocked: p.unlocked, stats: p.stats, online: true, canBuy: !!p.canBuy, awards: p.awards || [] };
     settings.stats = p.stats;
+    settings.extraUnlocked = p.unlocked.filter((id) => !unlockedFor(p.stats).includes(id)); // bought and awarded, for offline
     if (p.name && !settings.playerName) { settings.playerName = p.name; $('opt-name').value = p.name; }
     // the server's copy wins when it has one; otherwise push the local look up
     if (p.look && p.look.shell) settings.look = normalizeLook(p.look, p.unlocked);
@@ -411,7 +426,7 @@ function setLook(look) {
   renderProfile();
   if (!snigelpost.available()) return;
   clearTimeout(saveLookTimer);
-  saveLookTimer = setTimeout(() => snigelpost.profileSet(playerName(), settings.look).then((p) => { profileState = { unlocked: p.unlocked, stats: p.stats, online: true, canBuy: !!p.canBuy }; }).catch(() => {}), 300);
+  saveLookTimer = setTimeout(() => snigelpost.profileSet(playerName(), settings.look).then((p) => { profileState = { ...profileState, unlocked: p.unlocked, stats: p.stats, online: true, canBuy: !!p.canBuy }; }).catch(() => {}), 300);
 }
 // ---------- buying premium cosmetics (Stripe Checkout via the buy edge function) ----------
 async function buyItem(item, btn) {

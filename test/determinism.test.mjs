@@ -395,7 +395,10 @@ test('cosmetics: unlock rules match the server, looks never touch the simulation
   assert.ok(!unlockedFor({ wins: 999, dailyBest: 450 }).includes('gold'), 'premium is not unlockable yet');
   assert.deepEqual(normalizeLook({ shell: 'flame', hat: 'crown' }, unlockedFor({})), { shell: 'spiral', hat: 'none' });
   assert.deepEqual(normalizeLook({ shell: 'dots', hat: 'nonsense' }), { shell: 'dots', hat: 'none' });
-  assert.ok(SHELLS.every((s) => s.free || s.need || s.premium) && HATS.every((h) => h.free || h.need || h.premium));
+  assert.ok(SHELLS.every((s) => s.free || s.need || s.premium || s.award) && HATS.every((h) => h.free || h.need || h.premium || h.award));
+  // bought and awarded items come from the server as extras; unknown ids are dropped
+  assert.deepEqual(unlockedFor({}, ['laurel', 'gold', 'bogus']).slice(-2), ['laurel', 'gold']);
+  assert.deepEqual(normalizeLook({ shell: 'confetti', hat: 'laurel' }, unlockedFor({}, ['laurel'])), { shell: 'spiral', hat: 'laurel' });
   // a look on a team changes nothing in the state hash or the recording inputs
   const c = cfg(64);
   c.teams[0].look = { shell: 'gold', hat: 'tophat' };

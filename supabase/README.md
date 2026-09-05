@@ -120,6 +120,17 @@ skott (summan av dagsbästa) och anroparens egna rader. Nivåerna (Slemhög
 till Jättesnäcka) sätts av klienten i `js/season.js`. Gamla säsongers rader
 sparas som historik.
 
+# Säsongsbelöningar
+
+`snails_close_season` (`migrations/20260905040000_season_awards.sql`) körs av
+pg_cron tio minuter in på varje nytt kvartal och delar ut förra säsongens
+belöningar till `snails_season_awards`: topp tre i rating (minst tre rankade
+matcher) får lagerkransen, topp tre i säsongspoäng för Dagens skott får
+konfettiskalet. Idempotent per säsong. Belöningarna är permanenta, låser upp
+sakerna via `snails_unlocked`, syns som märken i profilen (`awards`) och som
+förra säsongens vinnare i `snails_season` (`last`). Kan köras för hand:
+`select public.snails_close_season('2026-Q3')` efter kvartalets slut.
+
 # Betalning för premiumkosmetik (Stripe)
 
 Guldskal och cylinder köps via Stripe Checkout. Flödet

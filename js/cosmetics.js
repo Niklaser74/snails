@@ -9,6 +9,7 @@ export const SHELLS = [
   { id: 'stars', need: { dailyBest: 250 } },
   { id: 'flame', need: { wins: 5 } },
   { id: 'gold', premium: true },
+  { id: 'confetti', award: 'daily' }, // top three in shot of the day season points
 ];
 export const HATS = [
   { id: 'none', free: true },
@@ -17,13 +18,14 @@ export const HATS = [
   { id: 'crown', need: { wins: 10 } },
   { id: 'viking', need: { dailyBest: 350 } },
   { id: 'tophat', premium: true },
+  { id: 'laurel', award: 'rank' }, // top three in season rating
 ];
 export const DEFAULT_LOOK = { shell: 'spiral', hat: 'none' };
 
 // same rule as the server: free ones always, earned ones by stats, premium never (yet)
-export function unlockedFor(stats = {}) {
+export function unlockedFor(stats = {}, extra = []) {
   const ok = (c) => c.free || (c.need && ((c.need.wins && (stats.wins || 0) >= c.need.wins) || (c.need.dailyBest && (stats.dailyBest || 0) >= c.need.dailyBest)));
-  return [...SHELLS, ...HATS].filter(ok).map((c) => c.id);
+  return [...SHELLS, ...HATS].filter(ok).map((c) => c.id).concat(extra.filter((id) => [...SHELLS, ...HATS].some((c) => c.id === id)));
 }
 export function normalizeLook(look, unlocked) {
   const l = { ...DEFAULT_LOOK, ...(look || {}) };
@@ -59,6 +61,14 @@ export function drawShellPattern(ctx, look, teamColor) {
     ctx.moveTo(SHELL.x - 13, SHELL.y + 13);
     for (let i = 0; i <= 6; i++) { const x = SHELL.x - 13 + i * 4.4; ctx.quadraticCurveTo(x + 1.5, SHELL.y - 4 - (i % 2) * 8, x + 4.4, SHELL.y + 2 + (i % 2) * 3); }
     ctx.lineTo(SHELL.x + 13, SHELL.y + 13); ctx.closePath(); ctx.fill();
+  } else if (p === 'confetti') {
+    const cols = ['#ff5fa2', '#ffe14d', '#4fc3f7', '#7ccf3a', '#ff8a3c'];
+    for (let i = 0; i < 14; i++) {
+      const a = (i * 2.4) % (Math.PI * 2), rr = 3 + ((i * 5) % 9);
+      ctx.fillStyle = cols[i % cols.length];
+      ctx.save(); ctx.translate(SHELL.x + Math.cos(a) * rr, SHELL.y + Math.sin(a) * rr); ctx.rotate(a);
+      ctx.fillRect(-2.2, -1.2, 4.4, 2.4); ctx.restore();
+    }
   } else if (p === 'gold') {
     const g = ctx.createRadialGradient(SHELL.x - 4, SHELL.y - 6, 2, SHELL.x, SHELL.y, 14);
     g.addColorStop(0, '#fff6c0'); g.addColorStop(0.5, '#f2c94c'); g.addColorStop(1, '#b8860b');
@@ -100,6 +110,15 @@ export function drawHat(ctx, look, outline = '#4a2e1c') {
     ctx.fillStyle = '#fff3d6';
     for (const d of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x + d * 8, top + 2); ctx.quadraticCurveTo(x + d * 16, top - 2, x + d * 13, top - 12); ctx.quadraticCurveTo(x + d * 12, top - 4, x + d * 6, top - 2); ctx.closePath(); ctx.fill(); ctx.stroke(); }
     ctx.strokeStyle = '#555'; ctx.beginPath(); ctx.moveTo(x - 10, top + 3); ctx.lineTo(x + 10, top + 3); ctx.stroke();
+  } else if (h === 'laurel') {
+    ctx.fillStyle = '#4caf50'; ctx.strokeStyle = '#2e7d32'; ctx.lineWidth = 1;
+    for (const d of [-1, 1]) for (let i = 0; i < 4; i++) {
+      const a = Math.PI + d * (0.35 + i * 0.4), r = SHELL.r + 1;
+      const cx = SHELL.x + Math.cos(a) * r, cy = SHELL.y + Math.sin(a) * r;
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(a + Math.PI / 2 + d * 0.5);
+      ctx.beginPath(); ctx.ellipse(0, 0, 4.5, 2.2, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.restore();
+    }
+    ctx.fillStyle = '#f2c94c'; ctx.beginPath(); ctx.arc(x, top - 1, 2.2, 0, Math.PI * 2); ctx.fill();
   } else if (h === 'tophat') {
     ctx.fillStyle = '#222';
     ctx.fillRect(x - 11, top + 2, 22, 3); ctx.strokeRect(x - 11, top + 2, 22, 3);
