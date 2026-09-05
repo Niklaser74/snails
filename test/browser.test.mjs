@@ -732,7 +732,8 @@ await test('Poki build: no links out, no invitations or accounts, local play and
   await page.click('#btn-start');
   await page.waitForFunction(() => window.__game && __game.turnCount === 1);
   // without network the SDK download fails and the game must carry on; with it, nothing may be called before the SDK has booted
-  assert.deepEqual(errors.filter((e) => !/Failed to load resource/.test(e)), []);
+  // (the SDK's own COOP-header warning appears only because the test server is plain http on a non-localhost origin in CI)
+  assert.deepEqual(errors.filter((e) => !/Failed to load resource|Cross-Origin-Opener-Policy/.test(e)), []);
   await page.close();
 });
 
