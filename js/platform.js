@@ -13,6 +13,7 @@
 
 function detect() {
   if (typeof location === 'undefined') return 'web';
+  if (typeof window !== 'undefined' && window.__PLATFORM) return window.__PLATFORM; // stamped into portal builds
   const forced = new URLSearchParams(location.search).get('platform');
   if (forced === 'poki' || forced === 'itch' || forced === 'web') return forced;
   const h = location.hostname;

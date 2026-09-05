@@ -119,11 +119,11 @@
     </section>
 
     <section id="online" class="online" hidden>
-      <h2 data-i18n="online.title">Snigelpost</h2>
-      <p class="blurb" data-i18n="online.blurb">Spela mot en kompis i egen takt. Skapa en match, skicka länken, spela ditt drag när du hinner.</p>
+      <h2 id="online-title" data-i18n="online.title">Snigelpost</h2>
+      <p class="blurb" id="online-blurb" data-i18n="online.blurb">Spela mot en kompis i egen takt. Skapa en match, skicka länken, spela ditt drag när du hinner.</p>
       <div class="row">
         <label><span data-i18n="online.name">Ditt namn</span> <input type="text" id="opt-name" maxlength="24"></label>
-        <label><span data-i18n="online.bestOf">Serie</span> <select id="opt-bestof"><option value="1" data-i18n="online.bestOf1">En match</option><option value="3" selected data-i18n="online.bestOf3">Bäst av 3</option><option value="5" data-i18n="online.bestOf5">Bäst av 5</option></select></label>
+        <label id="opt-bestof-label"><span data-i18n="online.bestOf">Serie</span> <select id="opt-bestof"><option value="1" data-i18n="online.bestOf1">En match</option><option value="3" selected data-i18n="online.bestOf3">Bäst av 3</option><option value="5" data-i18n="online.bestOf5">Bäst av 5</option></select></label>
         <button id="btn-online-create" class="primary" data-i18n="online.create">Skapa match</button>
       </div>
       <div id="online-list" class="online-list"></div>

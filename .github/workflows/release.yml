@@ -18,6 +18,11 @@ jobs:
           node-version: 22
       - run: npm test
       - run: node scripts/build-itch.mjs
+      - run: node scripts/build-poki.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snackmageddon-poki
+          path: dist/snackmageddon-poki.zip
       - uses: actions/upload-artifact@v4
         with:
           name: snackmageddon-itch

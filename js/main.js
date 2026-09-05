@@ -925,7 +925,7 @@ if (snigelpost.available()) {
 
   refreshMatchList();
   const joinId = new URLSearchParams(location.search).get('match');
-  if (joinId) openMatch(joinId);
+  if (joinId && platform.id !== 'poki') openMatch(joinId);
 }
 
 // ---------- weapons bar ----------
@@ -1121,6 +1121,12 @@ function handleGamepad() {
 if (!platform.allowExternalLinks) {
   for (const a of document.querySelectorAll('a[href]')) a.hidden = true;
   $('btn-install').hidden = true;
+}
+// Portals that forbid links out and accounts elsewhere: no Snigelpost invitations,
+// no e-mail linking, no purchases. Local play, shot of the day and the season stay.
+if (platform.id === 'poki') {
+  for (const id of ['online-title', 'online-blurb', 'opt-bestof-label', 'btn-online-create', 'online-list', 'account']) $(id)?.setAttribute('hidden', '');
+  document.body.classList.add('portal');
 }
 platform.init().then(() => platform.loaded());
 

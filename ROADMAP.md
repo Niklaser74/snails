@@ -55,7 +55,8 @@ att göra det hållbart, roligare och till slut lönsamt.
 ### Fas 4 – Distribution
 | Klart | Kvar |
 |---|---|
-| itch.io, publik, butler-push från CI | Poki-inskick (länk och checklista i `docs/store/poki.md`) |
+| itch.io, publik, butler-push från CI | Poki-inskick: kontot och formuläret är ditt (allt förberett i `docs/store/poki.md`) |
+| Poki-bygge: zip från release-flödet, Poki-läge utan länkar ut, konton eller köp | |
 | Poki-SDK-adapter i koden | snails.se: DNS i Cloudflare, custom domain i GitHub Pages |
 | Svenska och engelska | Google Play via PWABuilder, App Store via Capacitor (efter fas 3) |
 | Mätning i Supabase | |

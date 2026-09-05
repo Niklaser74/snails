@@ -716,6 +716,25 @@ await test('shot of the day: play, get a score, see it on the leaderboard', asyn
   await page.close();
 });
 
+await test('Poki build: no links out, no invitations or accounts, local play and the shot of the day work', async () => {
+  const { page, errors } = await open('/?platform=poki&seed=4242');
+  await page.waitForFunction(() => document.body.classList.contains('portal'));
+  assert.equal(await page.locator('a[href]:not([hidden])').count(), 0, 'no visible links');
+  for (const id of ['btn-install', 'online-title', 'btn-online-create', 'online-list', 'account']) assert.equal(await page.locator('#' + id).isHidden(), true, id + ' should be hidden');
+  assert.equal(await page.locator('#opt-name').isVisible(), true, 'the name is still needed for the leaderboards');
+  assert.equal(await page.locator('#daily').isVisible(), true);
+  assert.equal(await page.locator('#season').isVisible(), true);
+  await page.waitForFunction(() => document.querySelectorAll('#pick-shell button').length === 7);
+  assert.equal(await page.locator('#pick-shell button[data-id=gold]').textContent().then((t) => /Buy|Köp/.test(t)), false, 'no purchases on Poki');
+  assert.equal(await page.evaluate(() => navigator.serviceWorker.controller), null, 'no service worker on a portal');
+  await page.selectOption('.team-row:nth-child(2) select', 'easy');
+  await page.click('#btn-start');
+  await page.waitForFunction(() => window.__game && __game.turnCount === 1);
+  // the Poki SDK cannot load in the sandbox (no network); the game must carry on without it
+  assert.deepEqual(errors.filter((e) => !/Failed to load resource/.test(e)), []);
+  await page.close();
+});
+
 await test('service worker registers and manifest is valid', async () => {
   const { page, errors } = await open('/');
   const sw = await page.evaluate(async () => {
