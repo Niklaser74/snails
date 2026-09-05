@@ -737,6 +737,23 @@ await test('Poki build: no links out, no invitations or accounts, local play and
   await page.close();
 });
 
+await test('Google Play (TWA): everything as on the web except purchases, the daily shortcut starts the shot', async () => {
+  const { page, errors } = await open('/?twa=1');
+  await page.waitForFunction(() => document.querySelectorAll('#pick-shell button').length === 7);
+  const uid = [...fake.accounts.keys()].pop();
+  fake.accounts.get(uid).email = 'play@example.test';
+  await page.reload();
+  await page.waitForFunction(() => document.querySelectorAll('#pick-shell button').length === 7 && sessionStorage.getItem('snackmageddon.twa') === '1');
+  assert.equal(await page.locator('#pick-shell button[data-id=gold]').isDisabled(), true, 'no Stripe purchases inside the Play app');
+  assert.equal(await page.locator('#online-title').isVisible(), true, 'Snigelpost stays');
+  assert.equal(await page.locator('#account').isVisible(), true, 'e-mail linking stays');
+  await page.goto(base + '/?daily=1');
+  await page.waitForFunction(() => window.__game && __game.daily);
+  assert.equal(await page.evaluate(() => location.search), '');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
 await test('service worker registers and manifest is valid', async () => {
   const { page, errors } = await open('/');
   const sw = await page.evaluate(async () => {
@@ -747,6 +764,13 @@ await test('service worker registers and manifest is valid', async () => {
   const manifest = await page.evaluate(() => fetch('manifest.webmanifest').then((r) => r.json()));
   assert.equal(manifest.display, 'fullscreen');
   assert.ok(manifest.icons.some((i) => i.sizes === '512x512'));
+  assert.ok(manifest.icons.some((i) => i.purpose === 'maskable'), 'Play wants a maskable icon');
+  assert.equal(manifest.id, '/');
+  assert.ok(manifest.screenshots.length >= 4 && manifest.screenshots.some((s) => s.form_factor === 'narrow'));
+  assert.deepEqual(manifest.categories, ['games', 'entertainment']);
+  for (const s of manifest.screenshots) assert.equal((await page.evaluate((u) => fetch(u).then((r) => r.status), s.src)), 200, s.src + ' missing');
+  assert.equal(await page.evaluate(() => fetch('.well-known/assetlinks.json').then((r) => r.json()).then((j) => j[0].target.package_name)), 'se.snails.app');
+  assert.equal(await page.evaluate(() => fetch('privacy.html').then((r) => r.status)), 200);
   assert.deepEqual(errors, []);
   await page.close();
 });

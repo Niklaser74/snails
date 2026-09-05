@@ -1,18 +1,100 @@
 {
+  "id": "/",
   "name": "Snailmageddon",
   "short_name": "Snailmageddon",
-  "description": "Turbaserat artilleri-spel med afrikanska jättesnäckor. Spela offline.",
-  "lang": "sv",
+  "description": "Turn-based artillery with giant African land snails. Play offline against the computer, on one device with friends, or by Snail Mail against a friend at your own pace. Daily challenge, seasons and unlockable looks.",
+  "lang": "en",
+  "dir": "ltr",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",
-  "orientation": "landscape",
+  "display_override": [
+    "fullscreen",
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "any",
   "background_color": "#5fb0ea",
   "theme_color": "#5fb0ea",
+  "categories": [
+    "games",
+    "entertainment"
+  ],
+  "prefer_related_applications": false,
   "icons": [
-    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "docs/store/screenshots/01-meny.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Menu"
+    },
+    {
+      "src": "docs/store/screenshots/02-sikta.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Aiming with the trajectory preview"
+    },
+    {
+      "src": "docs/store/screenshots/03-explosion.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Explosion"
+    },
+    {
+      "src": "docs/store/screenshots/04-saltregn.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Salt rain"
+    },
+    {
+      "src": "docs/store/screenshots/05-mobil.png",
+      "sizes": "780x1688",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "On a phone"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Shot of the day",
+      "short_name": "Daily",
+      "url": "./?daily=1",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
   ]
 }

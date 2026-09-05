@@ -9,13 +9,19 @@
 //   platform.gameplayStop()  a match ends or the player leaves it
 //   platform.commercialBreak(onPause, onResume)  resolves after the ad (or immediately)
 //   platform.allowExternalLinks  false on portals that forbid links out of the game
+//   platform.allowPayments       false where the store's own billing is mandatory (Google Play) or payments are banned (Poki)
 //   platform.useServiceWorker    false when hosted inside a portal iframe
 
 function detect() {
   if (typeof location === 'undefined') return 'web';
   if (typeof window !== 'undefined' && window.__PLATFORM) return window.__PLATFORM; // stamped into portal builds
   const forced = new URLSearchParams(location.search).get('platform');
-  if (forced === 'poki' || forced === 'itch' || forced === 'web') return forced;
+  if (forced === 'poki' || forced === 'itch' || forced === 'web' || forced === 'android') return forced;
+  // Google Play (Trusted Web Activity): the first navigation comes from android-app://; remember it for the session
+  try {
+    if (document.referrer.startsWith('android-app://') || new URLSearchParams(location.search).get('twa') === '1') sessionStorage.setItem('snackmageddon.twa', '1');
+    if (sessionStorage.getItem('snackmageddon.twa') === '1') return 'android';
+  } catch { /* storage blocked */ }
   const h = location.hostname;
   if (h.endsWith('.itch.zone') || h.endsWith('.itch.io')) return 'itch';
   if (h.endsWith('.poki.com') || h.endsWith('.poki-gdn.com') || h.endsWith('poki.dev')) return 'poki';
@@ -25,6 +31,7 @@ function detect() {
 const noop = {
   id: 'web',
   allowExternalLinks: true,
+  allowPayments: true,
   useServiceWorker: true,
   async init() {},
   loaded() {},
@@ -48,6 +55,7 @@ const poki = {
   ...noop,
   id: 'poki',
   allowExternalLinks: false,
+  allowPayments: false,
   useServiceWorker: false,
   sdk: null,
   ready: false, // true once PokiSDK.init() has resolved; nothing is called on the SDK before that
@@ -90,7 +98,17 @@ const itch = {
   ...noop,
   id: 'itch',
   allowExternalLinks: true,
+  allowPayments: false, // itch has its own store; keep the web build the only place that sells
   useServiceWorker: false, // itch serves the game from a sandboxed CDN origin per upload
 };
 
-export const platform = { web: noop, itch, poki }[detect()];
+// Google Play wraps the site in a Trusted Web Activity. Everything works as on the
+// web, but Play's payments policy requires Google Play Billing for digital goods,
+// so the Stripe purchases are hidden here.
+const android = {
+  ...noop,
+  id: 'android',
+  allowPayments: false,
+};
+
+export const platform = { web: noop, itch, poki, android }[detect()];

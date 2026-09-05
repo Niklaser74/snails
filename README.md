@@ -115,6 +115,8 @@ js/cosmetics.js       skalmönster och hattar, upplåsningsregler, ritning
 js/season.js          säsong (kvartal), Elo-spegel och ranknivåer
 js/themes.js          terrängteman: färger och dekorationer, rent visuellt
 js/gamepad.js         handkontroll (Gamepad API), skriver in i game.input
+android/              Bubblewrap-konfiguration för Google Play (docs/store/google-play.md)
+privacy.html          integritetspolicy (krävs av Google Play)
 js/terrain.js         förstörbar terräng (canvas + kollisionsmask)
 js/snails.js          snäck-sprites (alla stilar)
 js/audio.js           syntetiserade ljudeffekter

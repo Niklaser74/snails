@@ -325,6 +325,7 @@ async function renderDaily() {
   } catch (e) { st.textContent = t('online.error', { msg: e.message }); }
 }
 $('btn-daily').addEventListener('click', startDaily);
+if (new URLSearchParams(location.search).get('daily') === '1') { history.replaceState(null, '', location.pathname); setTimeout(startDaily, 0); } // app shortcut; after the module has finished setting up
 
 // ---------- season ----------
 function fillBoard(id, rows, render) {
@@ -374,7 +375,7 @@ function renderPicker(boxId, items, kind) {
   for (const c of items) {
     const locked = !profileState.unlocked.includes(c.id);
     // premium: a buy button when the account can pay (linked e-mail, web build, online)
-    const buyable = locked && c.premium && profileState.online && platform.id === 'web';
+    const buyable = locked && c.premium && profileState.online && platform.allowPayments;
     const b = document.createElement('button');
     b.type = 'button';
     b.dataset.id = c.id;

@@ -1,0 +1,50 @@
+{
+  "packageId": "se.snails.app",
+  "host": "snails.se",
+  "name": "Snailmageddon",
+  "launcherName": "Snailmageddon",
+  "display": "fullscreen",
+  "orientation": "default",
+  "themeColor": "#5fb0ea",
+  "themeColorDark": "#1f1710",
+  "navigationColor": "#5fb0ea",
+  "navigationColorDark": "#1f1710",
+  "navigationDividerColor": "#5fb0ea",
+  "navigationDividerColorDark": "#1f1710",
+  "backgroundColor": "#5fb0ea",
+  "enableNotifications": true,
+  "startUrl": "/?twa=1",
+  "iconUrl": "https://snails.se/icons/icon-512.png",
+  "maskableIconUrl": "https://snails.se/icons/icon-512-maskable.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "snailmageddon"
+  },
+  "appVersionName": "0.3.0",
+  "appVersionCode": 1,
+  "shortcuts": [
+    {
+      "name": "Shot of the day",
+      "shortName": "Daily",
+      "url": "/?twa=1&daily=1",
+      "chosenIconUrl": "https://snails.se/icons/icon-192.png"
+    }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://snails.se/manifest.webmanifest",
+  "fullScopeUrl": "https://snails.se/",
+  "minSdkVersion": 21,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "orientationLock": false,
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "appVersion": "0.3.0"
+}

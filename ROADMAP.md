@@ -58,7 +58,8 @@ att göra det hållbart, roligare och till slut lönsamt.
 | itch.io, publik, butler-push från CI | Poki-inskick: kontot och formuläret är ditt (allt förberett i `docs/store/poki.md`) |
 | Poki-bygge: zip från release-flödet, Poki-läge utan länkar ut, konton eller köp | |
 | Poki-SDK-adapter i koden | snails.se: DNS i Cloudflare, custom domain i GitHub Pages |
-| Svenska och engelska | Google Play via PWABuilder, App Store via Capacitor (efter fas 3) |
+| Svenska och engelska | App Store via Capacitor |
+| Google Play via Bubblewrap: manifest, assetlinks, integritetspolicy, Play-läge utan Stripe, twa-manifest och guide i `docs/store/google-play.md` | Play-konto, signering och uppladdning (ditt) |
 | Mätning i Supabase | |
 
 ## Lärdomar från första dagen, som blir arbete
