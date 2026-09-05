@@ -50,21 +50,24 @@ const poki = {
   allowExternalLinks: false,
   useServiceWorker: false,
   sdk: null,
+  ready: false, // true once PokiSDK.init() has resolved; nothing is called on the SDK before that
   async init() {
     try {
       await loadScript('https://game-cdn.poki.com/scripts/v2/poki-sdk.js');
-      this.sdk = window.PokiSDK;
-      if (new URLSearchParams(location.search).get('pokidebug')) this.sdk.setDebug(true);
-      await this.sdk.init();
+      const sdk = window.PokiSDK;
+      if (new URLSearchParams(location.search).get('pokidebug')) sdk.setDebug(true);
+      await sdk.init();
+      this.sdk = sdk;
+      this.ready = true;
     } catch {
       this.sdk = null; // ad blocker or offline: the game must still work
     }
   },
-  loaded() { this.sdk?.gameLoadingFinished(); },
-  gameplayStart() { this.sdk?.gameplayStart(); },
-  gameplayStop() { this.sdk?.gameplayStop(); },
+  loaded() { if (this.ready) this.sdk.gameLoadingFinished(); },
+  gameplayStart() { if (this.ready) this.sdk.gameplayStart(); },
+  gameplayStop() { if (this.ready) this.sdk.gameplayStop(); },
   async commercialBreak(onPause, onResume) {
-    if (!this.sdk) return;
+    if (!this.ready) return;
     try {
       await this.sdk.commercialBreak(onPause);
     } finally {
@@ -72,7 +75,7 @@ const poki = {
     }
   },
   async rewardedBreak(onPause, onResume) {
-    if (!this.sdk) return false;
+    if (!this.ready) return false;
     try {
       return await this.sdk.rewardedBreak(onPause);
     } catch {

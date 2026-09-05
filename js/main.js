@@ -1128,7 +1128,7 @@ if (platform.id === 'poki') {
   for (const id of ['online-title', 'online-blurb', 'opt-bestof-label', 'btn-online-create', 'online-list', 'account']) $(id)?.setAttribute('hidden', '');
   document.body.classList.add('portal');
 }
-platform.init().then(() => platform.loaded());
+window.__platformReady = platform.init().then(() => platform.loaded());
 
 // ---------- PWA ----------
 let deferredPrompt = null;
