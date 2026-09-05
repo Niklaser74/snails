@@ -173,10 +173,23 @@ await test('gamepad: stick and buttons drive the input, shoulder buttons switch 
   await page.evaluate(() => { window.__manualTick = true; });
   await page.click('#tut-skip').catch(() => {});
   await page.evaluate(() => { __pad.connected = true; });
-  await page.waitForFunction(() => /Gamepad connected|Handkontroll ansluten/.test(document.getElementById('notice').textContent));
-  // left stick right + d-pad up
+  // an idle pad must not block the keyboard or the touch buttons, and must not announce itself
+  await page.waitForTimeout(150);
+  assert.doesNotMatch(await page.evaluate(() => document.getElementById('notice').textContent), /Gamepad connected|Handkontroll ansluten/, 'a listed but unused pad is not announced');
+  await page.keyboard.down('ArrowLeft');
+  await page.waitForTimeout(150);
+  assert.equal(await page.evaluate(() => __game.input.left), true, 'keyboard works while an idle pad is listed');
+  await page.keyboard.up('ArrowLeft');
+  await page.waitForFunction(() => !__game.input.left);
+  await page.locator('.tbtn[data-key="fire"]').dispatchEvent('pointerdown');
+  await page.waitForTimeout(150);
+  assert.equal(await page.evaluate(() => __game.input.fire), true, 'touch buttons work while an idle pad is listed');
+  await page.locator('.tbtn[data-key="fire"]').dispatchEvent('pointerup');
+  await page.waitForFunction(() => !__game.input.fire);
+  // left stick right + d-pad up: the first real input announces the pad
   await page.evaluate(() => { __pad.axes[0] = 0.9; __press(12); });
   await page.waitForFunction(() => __game.input.right && __game.input.up && !__game.input.left);
+  await page.waitForFunction(() => /Gamepad connected|Handkontroll ansluten/.test(document.getElementById('notice').textContent));
   await page.evaluate(() => { __pad.axes[0] = 0; __press(12, false); });
   await page.waitForFunction(() => !__game.input.right && !__game.input.up);
   // RB then LB cycle the weapon, edge-triggered (holding does not keep cycling)
