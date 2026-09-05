@@ -70,6 +70,8 @@ await test('menu and design page load without errors', async () => {
   await page.goto(base + '/design/snails.html');
   await page.waitForTimeout(300);
   assert.equal(await page.locator('canvas').count(), 5);
+  await page.click('#back');
+  await page.waitForSelector('#btn-start');
   assert.deepEqual(errors, []);
   await page.close();
 });
