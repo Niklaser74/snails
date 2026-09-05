@@ -375,6 +375,9 @@ await test('Snigelpost: two players trade turns through the server', async () =>
   assert.equal(fake.matches.get(matchId).status, 'finished');
   assert.equal(fake.matches.get(matchId).winner, 0, 'host should win when guest resigns');
   await until(() => fake.notifies.some((n) => n.match_id === matchId && n.event === 'resigned'), 'no resign notification');
+  const rated = [...fake.ratings.values()].map((r) => r.rating).sort((x, y) => y - x);
+  assert.deepEqual(rated, [1016, 984], 'the resign should move both ratings');
+  assert.equal([...fake.matches.values()].filter((m) => m.rated).length, 1);
   const ser = [...fake.series.values()][0];
   assert.equal(ser.wins_host, 1); assert.equal(ser.status, 'playing'); assert.equal(ser.match_no, 2);
   const m2id = ser.current_match;
@@ -424,6 +427,10 @@ await test('Snigelpost: two players trade turns through the server', async () =>
   await a.waitForFunction(() => document.getElementById('waiting').hidden && __game.active.team === 0);
   await a.click('#btn-menu');
   await a.waitForSelector('.mrow');
+  await a.waitForFunction(() => document.querySelectorAll('#season-rank li').length === 2);
+  assert.match(await a.locator('#season-rank li.me').textContent(), /1032|1031|1030/);
+  assert.match(await a.locator('#season-rank-me').textContent(), /rank 1 of 2|plats 1 av 2/);
+  assert.match(await a.locator('#profile-stats').textContent(), /Rank: (Garden snail|Trädgårdssnäcka) \(10\d\d\)/);
   assert.match(await a.locator('.mrow .mname').first().textContent(), /Gäst|B|…|Snail|Snäcka/);
   assert.deepEqual(errors, []);
   await ctxA.close(); await ctxB.close();

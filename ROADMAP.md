@@ -42,7 +42,8 @@ att göra det hållbart, roligare och till slut lönsamt.
 | Klart | Kvar |
 |---|---|
 | Dagens skott: samma bana och vapen för alla per dag, ett skott, topplista, bästa försöket räknas | Betalning för premiumkosmetik (guldskal, cylinder) |
-| Profil: namn, statistik, skalmönster och hattar; låses upp med vinster och Dagens skott; syns för motståndaren | Rank och säsonger |
+| Profil: namn, statistik, skalmönster och hattar; låses upp med vinster och Dagens skott; syns för motståndaren | |
+| Rank (Elo per kvartalssäsong, fem nivåer) och säsongspoäng för Dagens skott, topplistor i menyn | Säsongsbelöningar (kosmetik till topp tre) |
 | E-postkoppling (fas 2) som grund | |
 | | Serversidig verifiering av dagens skott (inspelningen sparas redan) |
 
@@ -107,7 +108,8 @@ Stripe när e-postkoppling finns, sedan säsongspass och belönad reklam.
 daglig återkomst utan att kräva kosmetik.~~ Dagens skott klart 2026-09-05. Profil och kosmetik klart 2026-09-05; två
 premiumsaker ligger låsta som "kommer snart" tills betalning finns (Stripe
 eller butikernas köp, kräver e-postkopplat konto).
-Nästa: rank och säsonger, sedan betalning.
+Rank och säsonger klart 2026-09-05.
+Nästa: betalning för premiumkosmetik, sedan säsongsbelöningar.
 
 ## Risker
 

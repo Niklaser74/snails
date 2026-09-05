@@ -131,6 +131,10 @@ button.danger { color: #b3261e; }
 .board { margin: 8px 0 0; padding-left: 22px; columns: 2; column-gap: 24px; font-size: 13px; }
 .board li { break-inside: avoid; display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
 .board li.me { font-weight: 700; color: #3aaa5c; }
+.board.one { columns: 1; }
+.boards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 600px) { .boards { grid-template-columns: 1fr; } }
+.tier { display: inline-block; padding: 1px 7px; border-radius: 8px; background: #efe6d6; font-size: 11px; font-weight: 700; margin-left: 4px; }
 .board .bname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile { margin-top: 4px; }
 .pickers { display: flex; flex-wrap: wrap; gap: 16px; margin: 6px 0; }

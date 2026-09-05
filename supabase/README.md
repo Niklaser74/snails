@@ -108,6 +108,18 @@ skapas, ansluts, fortsätts i en serie eller revansch, så motståndarens enhet
 kan rita det utan extra anrop. Byter man utseende uppdateras pågående
 matcher.
 
+# Rank och säsonger
+
+`snails_ratings` (`migrations/20260905020000_seasons.sql`) har en rad per
+spelare och säsong (kalenderkvartal, `snails_season_key`). När en match
+mellan två spelare avslutas kör `snails_series_after_finish` först
+`snails_rate_match`: Elo med K = 32 från 1000, en gång per match (`rated`).
+Uppgiven match och vinst efter tystnad räknas som förlust respektive vinst.
+`snails_season` ger topp tio i rating, topp tio i säsongspoäng för Dagens
+skott (summan av dagsbästa) och anroparens egna rader. Nivåerna (Slemhög
+till Jättesnäcka) sätts av klienten i `js/season.js`. Gamla säsongers rader
+sparas som historik.
+
 # E-postkoppling av kontot
 
 Ett anonymt konto kan kopplas till en e-postadress i menyn (Snigelpost →

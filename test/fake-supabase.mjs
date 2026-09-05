@@ -8,6 +8,20 @@ export function createFakeSupabase() {
   const supportedRules = [2, 3]; // mirrors snails_rules on the server
   const dailyRows = new Map(); // `${day}/${uid}` -> row
   const profiles = new Map(); // uid -> { name, look }
+  const ratings = new Map(); // `${season}/${uid}` -> { rating, games, wins, losses, draws, updated }
+  const seasonKey = () => { const d = new Date(); return `${d.getUTCFullYear()}-Q${Math.floor(d.getUTCMonth() / 3) + 1}`; };
+  const rateMatch = (m) => {
+    if (m.rated || m.status !== 'finished' || !m.guest) return;
+    const k = (u) => `${seasonKey()}/${u}`;
+    for (const u of [m.host, m.guest]) if (!ratings.has(k(u))) ratings.set(k(u), { uid: u, rating: 1000, games: 0, wins: 0, losses: 0, draws: 0, updated: 0 });
+    const h = ratings.get(k(m.host)), g = ratings.get(k(m.guest));
+    const eh = 1 / (1 + Math.pow(10, (g.rating - h.rating) / 400));
+    const sh = m.winner === 0 ? 1 : m.winner === 1 ? 0 : 0.5;
+    const d = Math.round(32 * (sh - eh));
+    h.rating += d; g.rating -= d; h.games++; g.games++; h.updated = g.updated = ++seq;
+    if (m.winner === 0) { h.wins++; g.losses++; } else if (m.winner === 1) { g.wins++; h.losses++; } else { h.draws++; g.draws++; }
+    m.rated = true;
+  };
   const FREE = ['spiral', 'stripes', 'dots', 'none', 'cap', 'party'];
   const statsFor = (uid) => {
     const fin = [...matches.values()].filter((m) => m.status === 'finished' && m.guest && (m.host === uid || m.guest === uid));
@@ -44,6 +58,7 @@ export function createFakeSupabase() {
     return n;
   };
   const afterFinish = (m) => {
+    rateMatch(m);
     const s = series.get(m.series_id); if (!s || s.status === 'finished' || s.current_match !== m.id) return;
     if (m.winner != null) { const w = m.winner === 0 ? m.host : m.guest; if (w === s.host) s.wins_host++; else s.wins_guest++; }
     const needed = Math.floor(s.best_of / 2) + 1;
@@ -56,7 +71,23 @@ export function createFakeSupabase() {
 
   const rpc = {
     snails_supported_rules() { return supportedRules; },
-    snails_profile(uid) { const p = profiles.get(uid); return { name: p?.name || '', look: p?.look || {}, stats: statsFor(uid), unlocked: unlockedFor(uid) }; },
+    snails_profile(uid) { const p = profiles.get(uid); const r = ratings.get(`${seasonKey()}/${uid}`); return { name: p?.name || '', look: p?.look || {}, stats: { ...statsFor(uid), rating: r?.rating ?? 1000, seasonGames: r?.games ?? 0, season: seasonKey() }, unlocked: unlockedFor(uid) }; },
+    snails_season(uid) {
+      const sk = seasonKey();
+      const rows = [...ratings.values()].filter((r, i, all) => [...ratings.keys()][i].startsWith(sk + '/')).sort((a, b) => b.rating - a.rating || a.updated - b.updated);
+      const me = rows.find((r) => r.uid === uid);
+      const byUser = new Map();
+      for (const d of dailyRows.values()) { const e = byUser.get(d.uid) || { uid: d.uid, name: d.name, pts: 0, days: 0 }; e.pts += d.score; e.days++; e.name = d.name; byUser.set(d.uid, e); }
+      const drows = [...byUser.values()].sort((a, b) => b.pts - a.pts);
+      const dme = drows.find((r) => r.uid === uid);
+      return {
+        season: sk, ends_at: '2026-10-01', days_left: 26,
+        rank: { total: rows.length, top: rows.slice(0, 10).map((r) => ({ name: profiles.get(r.uid)?.name || 'Snäcka', rating: r.rating, games: r.games, me: r.uid === uid })),
+          me: me ? { rating: me.rating, games: me.games, wins: me.wins, losses: me.losses, draws: me.draws, rank: rows.indexOf(me) + 1 } : null },
+        daily: { total: drows.length, top: drows.slice(0, 10).map((r) => ({ name: r.name, points: r.pts, days: r.days, me: r.uid === uid })),
+          me: dme ? { points: dme.pts, days: dme.days, rank: drows.indexOf(dme) + 1 } : null },
+      };
+    },
     snails_profile_set(uid, a) {
       const look = cleanLook(a.p_look, unlockedFor(uid));
       profiles.set(uid, { name: (a.p_name || 'Snäcka').slice(0, 24), look });
@@ -238,5 +269,5 @@ export function createFakeSupabase() {
     const tok = 'tok-' + mail.uid + '-' + (++seq); users.set(tok, mail.uid);
     return `#access_token=${tok}&refresh_token=ref-${mail.uid}&expires_in=3600&token_type=bearer&type=${mail.kind}`;
   }
-  return { handle, matches, turns, series, events, pushes, notifies, accounts, mails, clickMail, dailyRows, profiles, install: (page) => page.route('**/*.supabase.co/**', handle) };
+  return { handle, matches, turns, series, events, pushes, notifies, accounts, mails, clickMail, dailyRows, profiles, ratings, install: (page) => page.route('**/*.supabase.co/**', handle) };
 }

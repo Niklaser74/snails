@@ -3,6 +3,7 @@ import { snigelpost } from './online.js';
 import { online } from './supa.js';
 import { daily, dailyConfig, dayKey, weaponFor } from './daily.js';
 import { SHELLS, HATS, unlockedFor, normalizeLook } from './cosmetics.js';
+import { season, tierFor } from './season.js';
 import { push } from './push.js';
 import { SNAIL_STYLES, TEAM_COLORS, drawSnail } from './snails.js';
 import { unlockAudio, sfx } from './audio.js';
@@ -112,6 +113,7 @@ function applyLanguage() {
   renderAccount();
   renderDaily();
   renderProfile();
+  renderSeason();
   // team names that are still the default of some language follow the language switch
   document.querySelectorAll('.team-row').forEach((row, i) => {
     const input = row.querySelector('input');
@@ -319,6 +321,34 @@ async function renderDaily() {
 }
 $('btn-daily').addEventListener('click', startDaily);
 
+// ---------- season ----------
+function fillBoard(id, rows, render) {
+  const box = $(id);
+  box.innerHTML = '';
+  for (const r of rows) {
+    const li = document.createElement('li');
+    li.className = r.me ? 'me' : '';
+    li.innerHTML = '<span class="bname"></span><span class="bscore"></span>';
+    li.querySelector('.bname').textContent = r.name;
+    li.querySelector('.bscore').textContent = render(r);
+    box.appendChild(li);
+  }
+}
+async function renderSeason() {
+  const st = $('season-status');
+  if (!season.available()) { st.textContent = t('season.offline'); return; }
+  try {
+    const s = await season.get();
+    $('season-key').textContent = s.season;
+    $('season-blurb').textContent = t('season.blurb', { end: s.ends_at, days: s.days_left });
+    fillBoard('season-rank', s.rank.top, (r) => `${r.rating} · ${t('tier.' + tierFor(r.rating))}`);
+    fillBoard('season-daily', s.daily.top, (r) => `${r.points} p`);
+    $('season-rank-me').textContent = s.rank.me ? t('season.rankMe', { tier: t('tier.' + tierFor(s.rank.me.rating)), rating: s.rank.me.rating, rank: s.rank.me.rank, total: s.rank.total, games: s.rank.me.games }) : (s.rank.top.length ? t('season.rankNone') : t('season.empty'));
+    $('season-daily-me').textContent = s.daily.me ? t('season.dailyMe', { points: s.daily.me.points, days: s.daily.me.days, rank: s.daily.me.rank, total: s.daily.total }) : (s.daily.top.length ? t('season.dailyNone') : t('season.empty'));
+    st.textContent = '';
+  } catch (e) { st.textContent = t('online.error', { msg: e.message }); }
+}
+
 // ---------- profile: stats and look ----------
 function needText(c) {
   if (c.premium) return t('cos.premium');
@@ -352,7 +382,8 @@ function renderPicker(boxId, items, kind) {
 }
 function renderProfile() {
   const st = profileState.stats || {};
-  $('profile-stats').textContent = (profileState.online ? t('profile.stats', { wins: st.wins || 0, losses: st.losses || 0, best: st.dailyBest || 0, plays: st.dailyPlays || 0 }) + ' ' : '') + t('profile.local');
+  const rank = profileState.online && st.rating ? t('profile.rank', { tier: t('tier.' + tierFor(st.rating)), rating: st.rating }) + ' ' : '';
+  $('profile-stats').textContent = (profileState.online ? t('profile.stats', { wins: st.wins || 0, losses: st.losses || 0, best: st.dailyBest || 0, plays: st.dailyPlays || 0 }) + ' ' + rank : '') + t('profile.local');
   renderPicker('pick-shell', SHELLS, 'shell');
   renderPicker('pick-hat', HATS, 'hat');
 }
@@ -389,6 +420,7 @@ function reportAbandon() {
 function toMenu() {
   if (game && game.phase !== 'over' && !onlineMatch && !dailyGame) { reportAbandon(); platform.gameplayStop(); }
   if (dailyGame) { dailyGame = null; renderDaily(); }
+  if (snigelpost.available()) { renderSeason(); loadProfile(); }
   stopPolling();
   onlineMatch = null;
   replayUntil = 0;

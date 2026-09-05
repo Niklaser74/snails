@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { Game, RULES_VERSION, SUPPORTED_RULES, weaponsFor } from '../js/game.js';
 import { dailyConfig, seedFor, weaponFor, dayKey } from '../js/daily.js';
 import { unlockedFor, normalizeLook, SHELLS, HATS } from '../js/cosmetics.js';
+import { tierFor, elo, seasonKey, daysLeft, TIERS } from '../js/season.js';
 
 const cfg = (seed) => ({
   seed,
@@ -403,6 +404,18 @@ test('cosmetics: unlock rules match the server, looks never touch the simulation
   run(a, 60 * 60); run(b, 60 * 60);
   assert.equal(a.stateHash(), b.stateHash(), 'a look leaked into the simulation');
   assert.equal(JSON.stringify(a.recording.teams), JSON.stringify(b.recording.teams), 'the recording must not carry looks');
+});
+
+test('season: quarter keys, Elo mirror of the server, tiers', () => {
+  assert.equal(seasonKey(new Date('2026-09-05T12:00:00Z')), '2026-Q3');
+  assert.equal(seasonKey(new Date('2026-10-01T00:00:00Z')), '2026-Q4');
+  assert.equal(daysLeft(new Date('2026-09-05T12:00:00Z')), 26);
+  assert.deepEqual(elo(1000, 1000, 0), { host: 1016, guest: 984 }); // same numbers the server produced
+  assert.deepEqual(elo(1000, 1000, 1), { host: 984, guest: 1016 });
+  assert.deepEqual(elo(1000, 1000, null), { host: 1000, guest: 1000 });
+  assert.ok(elo(1200, 1000, 0).host - 1200 < 16, 'a favourite gains less');
+  assert.equal(tierFor(1000), 'garden'); assert.equal(tierFor(900), 'slug'); assert.equal(tierFor(1300), 'giant');
+  assert.ok(TIERS.every((x, i) => i === 0 || x.min > TIERS[i - 1].min));
 });
 
 test('turn time and sudden death are match rules that travel with the recording', () => {

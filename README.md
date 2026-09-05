@@ -111,6 +111,7 @@ js/main.js            meny, HUD, input, kamera, PWA-registrering
 js/game.js            spellogik: turordning, fysik, vapen, AI, rendering (regelversioner: docs/REGELVERSIONER.md)
 js/daily.js           Dagens skott: bana och vapen ur datumet, topplista
 js/cosmetics.js       skalmönster och hattar, upplåsningsregler, ritning
+js/season.js          säsong (kvartal), Elo-spegel och ranknivåer
 js/terrain.js         förstörbar terräng (canvas + kollisionsmask)
 js/snails.js          snäck-sprites (alla stilar)
 js/audio.js           syntetiserade ljudeffekter
