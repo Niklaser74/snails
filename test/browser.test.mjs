@@ -491,7 +491,7 @@ await test('profile: pick a look, locked items stay locked, the look shows up in
   assert.equal(await page.locator('#pick-hat button.locked').count(), 3, 'crown, viking and top hat are locked at first');
   assert.equal(await page.locator('#pick-hat button[data-id=crown]').isDisabled(), true);
   assert.match(await page.locator('#pick-hat button[data-id=crown]').textContent(), /10 wins|10 vinster/);
-  assert.match(await page.locator('#pick-shell button[data-id=gold]').textContent(), /Coming soon|Kommer snart/);
+  assert.match(await page.locator('#pick-shell button[data-id=gold]').textContent(), /Link an e-mail first|Koppla e-post först/);
   await page.click('#pick-shell button[data-id=dots]');
   await page.click('#pick-hat button[data-id=party]');
   assert.equal(await page.locator('#pick-hat button.sel').getAttribute('data-id'), 'party');
@@ -515,6 +515,42 @@ await test('profile: pick a look, locked items stay locked, the look shows up in
   await page.click('#btn-wait-menu');
   await page.reload();
   await page.waitForFunction(() => document.querySelector('#pick-hat button.sel')?.dataset.id === 'party');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+await test('buying premium cosmetics: needs a linked e-mail, starts Checkout, unlocks on return', async () => {
+  const { page, errors } = await open('/');
+  await page.waitForFunction(() => document.querySelectorAll('#pick-shell button').length === 6);
+  // anonymous: premium is locked with a hint to link an e-mail first
+  const gold = page.locator('#pick-shell button[data-id=gold]');
+  assert.equal(await gold.isDisabled(), true);
+  assert.match(await gold.textContent(), /Link an e-mail first|Koppla e-post först/);
+  // link an e-mail (server side) and reload: the buy button appears
+  const uid = [...fake.accounts.keys()].pop();
+  fake.accounts.get(uid).email = 'buyer@example.test';
+  await page.reload();
+  await page.waitForFunction(() => document.querySelector('#pick-shell button[data-id=gold]')?.classList.contains('buy'));
+  assert.equal(await gold.isDisabled(), false);
+  assert.match(await gold.textContent(), /Buy|Köp/);
+  assert.equal(await page.locator('#pick-hat button[data-id=tophat]').isDisabled(), false);
+  // buying goes through the buy function, which sends the browser to Checkout (the fake sends it straight back)
+  await page.click('#pick-shell button[data-id=gold]');
+  await page.waitForFunction(() => document.querySelector('#pick-shell button[data-id=gold]')?.classList.contains('locked') && location.search === '', null, { timeout: 5000 }).catch(() => {});
+  assert.deepEqual(fake.checkouts, [{ uid, item: 'gold' }]);
+  // back on the site with ?bought=gold before the webhook has landed: waits, then the grant arrives
+  await page.goto('about:blank');
+  await page.goto(base + '/?bought=gold');
+  await page.waitForFunction(() => /waiting for confirmation|väntar på bekräftelse/.test(document.getElementById('profile-msg').textContent));
+  fake.grant(uid, 'gold');
+  await page.waitForFunction(() => /Thanks for your purchase|Tack för köpet/.test(document.getElementById('profile-msg').textContent), null, { timeout: 8000 });
+  assert.equal(await page.locator('#pick-shell button.sel').getAttribute('data-id'), 'gold', 'the bought shell should be selected');
+  assert.equal(await page.evaluate(() => location.search), '', 'the query should be cleaned');
+  await until(() => [...fake.profiles.values()].pop()?.look.shell === 'gold', 'bought look not saved on the server');
+  // cancelled checkout just says so
+  await page.goto('about:blank');
+  await page.goto(base + '/?cancelled=tophat');
+  await page.waitForFunction(() => /cancelled|avbröts/.test(document.getElementById('profile-msg').textContent));
   assert.deepEqual(errors, []);
   await page.close();
 });

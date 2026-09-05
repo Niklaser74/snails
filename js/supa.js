@@ -73,6 +73,19 @@ export const online = {
     return data;
   },
 
+  // Call an edge function as the signed-in user.
+  async fn(name, body = {}) {
+    const token = await this.token();
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || `${name} ${res.status}`);
+    return data;
+  },
+
   signOut() { saveSession(null); userCache = null; },
 
   // ---------- e-mail linking ----------

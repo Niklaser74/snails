@@ -145,6 +145,9 @@ button.danger { color: #b3261e; }
 .picker button canvas { width: 48px; height: 44px; }
 .picker button.sel { border-color: var(--accent); background: #eaf7ee; }
 .picker button.locked { opacity: .55; cursor: default; }
+.picker button.buy { opacity: 1; cursor: pointer; border-color: #f2c94c; }
+.picker button.buy canvas { filter: none; }
+.picker button.buy span { color: #a06a00; font-weight: 700; }
 .picker button.locked canvas { filter: grayscale(1); }
 .account { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 8px; }
 .account .row { margin: 6px 0; align-items: flex-end; }

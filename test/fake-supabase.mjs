@@ -8,6 +8,8 @@ export function createFakeSupabase() {
   const supportedRules = [2, 3]; // mirrors snails_rules on the server
   const dailyRows = new Map(); // `${day}/${uid}` -> row
   const profiles = new Map(); // uid -> { name, look }
+  const purchases = new Map(); // uid -> Set(item)
+  const checkouts = []; // calls to the buy function
   const ratings = new Map(); // `${season}/${uid}` -> { rating, games, wins, losses, draws, updated }
   const seasonKey = () => { const d = new Date(); return `${d.getUTCFullYear()}-Q${Math.floor(d.getUTCMonth() / 3) + 1}`; };
   const rateMatch = (m) => {
@@ -30,7 +32,7 @@ export function createFakeSupabase() {
     const mine = [...dailyRows.values()].filter((r) => r.uid === uid);
     return { matches: fin.length, wins, losses, dailyBest: Math.max(0, ...mine.map((r) => r.score)), dailyPlays: mine.reduce((a, r) => a + r.attempts, 0) };
   };
-  const unlockedFor = (uid) => { const st = statsFor(uid), u = [...FREE]; if (st.dailyBest >= 250) u.push('stars'); if (st.wins >= 5) u.push('flame'); if (st.wins >= 10) u.push('crown'); if (st.dailyBest >= 350) u.push('viking'); return u; };
+  const unlockedFor = (uid) => { const st = statsFor(uid), u = [...FREE]; if (st.dailyBest >= 250) u.push('stars'); if (st.wins >= 5) u.push('flame'); if (st.wins >= 10) u.push('crown'); if (st.dailyBest >= 350) u.push('viking'); return u.concat([...(purchases.get(uid) || [])]); };
   const cleanLook = (look, u) => ({ shell: u.includes(look?.shell) ? look.shell : 'spiral', hat: u.includes(look?.hat) ? look.hat : 'none' });
   const myLook = (uid) => profiles.get(uid)?.look || {};
   const matches = new Map();
@@ -71,7 +73,7 @@ export function createFakeSupabase() {
 
   const rpc = {
     snails_supported_rules() { return supportedRules; },
-    snails_profile(uid) { const p = profiles.get(uid); const r = ratings.get(`${seasonKey()}/${uid}`); return { name: p?.name || '', look: p?.look || {}, stats: { ...statsFor(uid), rating: r?.rating ?? 1000, seasonGames: r?.games ?? 0, season: seasonKey() }, unlocked: unlockedFor(uid) }; },
+    snails_profile(uid) { const p = profiles.get(uid); const r = ratings.get(`${seasonKey()}/${uid}`); return { name: p?.name || '', look: p?.look || {}, stats: { ...statsFor(uid), rating: r?.rating ?? 1000, seasonGames: r?.games ?? 0, season: seasonKey() }, unlocked: unlockedFor(uid), canBuy: !!accounts.get(uid)?.email, purchases: [...(purchases.get(uid) || [])] }; },
     snails_season(uid) {
       const sk = seasonKey();
       const rows = [...ratings.values()].filter((r, i, all) => [...ratings.keys()][i].startsWith(sk + '/')).sort((a, b) => b.rating - a.rating || a.updated - b.updated);
@@ -239,6 +241,16 @@ export function createFakeSupabase() {
         return json(404, { msg: 'no such auth endpoint ' + sub });
       }
       if (url.pathname === '/rest/v1/snails_events') { events.push(...JSON.parse(req.postData() || '[]')); return json(201, []); }
+      if (url.pathname === '/functions/v1/buy') {
+        const token = (req.headers()['authorization'] || '').replace('Bearer ', '');
+        const uid = users.get(token);
+        if (!uid) return json(401, { error: 'not signed in' });
+        const { item } = JSON.parse(req.postData() || '{}');
+        if (!['gold', 'tophat'].includes(item)) return json(400, { error: 'unknown item' });
+        if (!accounts.get(uid)?.email) return json(403, { error: 'email required' });
+        checkouts.push({ uid, item });
+        return json(200, { url: `${req.headers()['origin'] || 'http://localhost'}/?bought=${item}`, id: 'cs_test_' + checkouts.length });
+      }
       if (url.pathname === '/functions/v1/notify-turn') {
         const token = (req.headers()['authorization'] || '').replace('Bearer ', '');
         if (!users.get(token)) return json(401, { error: 'not signed in' });
@@ -269,5 +281,5 @@ export function createFakeSupabase() {
     const tok = 'tok-' + mail.uid + '-' + (++seq); users.set(tok, mail.uid);
     return `#access_token=${tok}&refresh_token=ref-${mail.uid}&expires_in=3600&token_type=bearer&type=${mail.kind}`;
   }
-  return { handle, matches, turns, series, events, pushes, notifies, accounts, mails, clickMail, dailyRows, profiles, ratings, install: (page) => page.route('**/*.supabase.co/**', handle) };
+  return { handle, matches, turns, series, events, pushes, notifies, accounts, mails, clickMail, dailyRows, profiles, ratings, purchases, checkouts, grant: (uid, item) => { if (!purchases.has(uid)) purchases.set(uid, new Set()); purchases.get(uid).add(item); }, install: (page) => page.route('**/*.supabase.co/**', handle) };
 }

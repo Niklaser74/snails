@@ -30,7 +30,7 @@ let replayUntil = 0; // >0 while the opponent's turn is being shown at speed
 let pollTimer = null;
 let renderAccount = () => {}; // set up once Snigelpost is available
 let dailyGame = null; // { key } while the shot of the day is being played
-let profileState = { unlocked: [], stats: {}, online: false }; // filled in once settings are loaded
+let profileState = { unlocked: [], stats: {}, online: false, canBuy: false }; // filled in once settings are loaded
 const waiting = $('waiting');
 
 // ---------- settings ----------
@@ -361,12 +361,14 @@ function renderPicker(boxId, items, kind) {
   box.innerHTML = '';
   for (const c of items) {
     const locked = !profileState.unlocked.includes(c.id);
+    // premium: a buy button when the account can pay (linked e-mail, web build, online)
+    const buyable = locked && c.premium && profileState.online && platform.id === 'web';
     const b = document.createElement('button');
     b.type = 'button';
     b.dataset.id = c.id;
-    b.className = (settings.look[kind] === c.id ? 'sel' : '') + (locked ? ' locked' : '');
-    b.disabled = locked;
-    b.title = t(`cos.${kind}.${c.id}`) + (locked ? ' – ' + needText(c) : '');
+    b.className = (settings.look[kind] === c.id ? 'sel' : '') + (locked ? ' locked' : '') + (buyable && profileState.canBuy ? ' buy' : '');
+    b.disabled = locked && !(buyable && profileState.canBuy);
+    b.title = t(`cos.${kind}.${c.id}`) + (locked ? ' – ' + (buyable ? (profileState.canBuy ? t('cos.buy') : t('cos.buyNeedsEmail')) : needText(c)) : '');
     const cv = document.createElement('canvas');
     cv.width = 96; cv.height = 88;
     const ctx = cv.getContext('2d');
@@ -374,9 +376,10 @@ function renderPicker(boxId, items, kind) {
     if (kind === 'hat') look.shell = 'spiral';
     drawSnail(ctx, settings.style, { x: 46, y: 74, facing: 1, color: TEAM_COLORS[0].hex, t: 0, scale: 1.7, look });
     const label = document.createElement('span');
-    label.textContent = locked ? '🔒 ' + needText(c) : t(`cos.${kind}.${c.id}`);
+    label.textContent = locked ? (buyable ? (profileState.canBuy ? '🛒 ' + t('cos.buy') : '🔒 ' + t('cos.buyNeedsEmail')) : '🔒 ' + needText(c)) : t(`cos.${kind}.${c.id}`);
     b.append(cv, label);
     if (!locked) b.addEventListener('click', () => setLook({ ...settings.look, [kind]: c.id }));
+    else if (buyable && profileState.canBuy) b.addEventListener('click', () => buyItem(c.id, b));
     box.appendChild(b);
   }
 }
@@ -391,7 +394,7 @@ async function loadProfile() {
   if (!snigelpost.available()) { renderProfile(); return; }
   try {
     const p = await snigelpost.profile();
-    profileState = { unlocked: p.unlocked, stats: p.stats, online: true };
+    profileState = { unlocked: p.unlocked, stats: p.stats, online: true, canBuy: !!p.canBuy };
     settings.stats = p.stats;
     if (p.name && !settings.playerName) { settings.playerName = p.name; $('opt-name').value = p.name; }
     // the server's copy wins when it has one; otherwise push the local look up
@@ -408,7 +411,43 @@ function setLook(look) {
   renderProfile();
   if (!snigelpost.available()) return;
   clearTimeout(saveLookTimer);
-  saveLookTimer = setTimeout(() => snigelpost.profileSet(playerName(), settings.look).then((p) => { profileState = { unlocked: p.unlocked, stats: p.stats, online: true }; }).catch(() => {}), 300);
+  saveLookTimer = setTimeout(() => snigelpost.profileSet(playerName(), settings.look).then((p) => { profileState = { unlocked: p.unlocked, stats: p.stats, online: true, canBuy: !!p.canBuy }; }).catch(() => {}), 300);
+}
+// ---------- buying premium cosmetics (Stripe Checkout via the buy edge function) ----------
+async function buyItem(item, btn) {
+  const msg = $('profile-msg');
+  btn.disabled = true;
+  msg.textContent = t('cos.buying');
+  track('buy', { item, step: 'start' });
+  try {
+    const r = await online.fn('buy', { item, lang: settings.lang || 'sv' });
+    if (!r.url) throw new Error('no url');
+    location.href = r.url;
+  } catch (e) {
+    msg.textContent = /not enabled|503/.test(e.message) ? t('cos.buyOff') : t('cos.buyError', { msg: e.message });
+    btn.disabled = false;
+  }
+}
+// back from Checkout: ?bought=<item> (the webhook may take a moment) or ?cancelled=<item>
+async function afterCheckout() {
+  const q = new URLSearchParams(location.search);
+  const bought = q.get('bought'), cancelled = q.get('cancelled');
+  if (!bought && !cancelled) return;
+  history.replaceState(null, '', location.pathname);
+  const msg = $('profile-msg');
+  if (cancelled) { msg.textContent = t('cos.cancelled'); track('buy', { item: cancelled, step: 'cancelled' }); return; }
+  track('buy', { item: bought, step: 'done' });
+  const kind = SHELLS.some((s) => s.id === bought) ? 'shell' : 'hat';
+  for (let i = 0; i < 8; i++) {
+    await loadProfile();
+    if (profileState.unlocked.includes(bought)) {
+      setLook({ ...settings.look, [kind]: bought });
+      msg.textContent = t('cos.bought', { item: t(`cos.${kind}.${bought}`) });
+      return;
+    }
+    msg.textContent = t('cos.boughtWait');
+    await new Promise((r) => setTimeout(r, 2000));
+  }
 }
 
 function reportAbandon() {
@@ -821,7 +860,7 @@ if (snigelpost.available()) {
   $('online').hidden = false;
   $('opt-name').value = settings.playerName || '';
   $('opt-name').addEventListener('change', () => { settings.playerName = $('opt-name').value.trim().slice(0, 24); saveSettings(settings); snigelpost.profileSet(playerName(), settings.look).catch(() => {}); });
-  loadProfile();
+  loadProfile().then(afterCheckout);
   $('btn-online-create').addEventListener('click', async () => {
     const b = $('btn-online-create');
     b.disabled = true;

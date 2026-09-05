@@ -120,6 +120,44 @@ skott (summan av dagsbästa) och anroparens egna rader. Nivåerna (Slemhög
 till Jättesnäcka) sätts av klienten i `js/season.js`. Gamla säsongers rader
 sparas som historik.
 
+# Betalning för premiumkosmetik (Stripe)
+
+Guldskal och cylinder köps via Stripe Checkout. Flödet
+(`migrations/20260905030000_purchases.sql`, `functions/buy`,
+`functions/stripe-webhook`):
+
+1. Klienten anropar edge-funktionen `buy` med `{ item }`. Den kräver att
+   kontot har e-post (så köpet överlever rensad webbdata), skapar en Checkout
+   Session med `client_reference_id` = användar-id och `metadata.item`, och
+   returnerar sessionens URL. Klienten skickar webbläsaren dit.
+2. Stripe skickar `checkout.session.completed` till `stripe-webhook`
+   (ingen JWT, signaturen i `Stripe-Signature` är inloggningen; kollas i
+   `verify.js`, testad i `test/stripe.test.mjs`). Funktionen anropar
+   `snails_grant_purchase` med service role; raden i `snails_purchases` är
+   idempotent på sessions-id.
+3. `snails_unlocked` räknar in köpta saker. Tillbaka på sajten
+   (`?bought=gold`) laddar klienten om profilen tills köpet syns och väljer
+   det köpta.
+
+**Slå på betalning** (ingenting av detta finns än, knapparna säger
+"Betalning är inte påslagen än" tills det är gjort):
+
+1. Skapa ett Stripe-konto. Lägg upp två produkter med engångspris
+   (t.ex. 29 kr): Guldskal och Cylinderhatt. Anteckna deras `price_…`-id.
+2. Supabase → Edge Functions → Secrets: `STRIPE_SECRET_KEY` (sk_live… eller
+   sk_test…), `STRIPE_PRICE_GOLD`, `STRIPE_PRICE_TOPHAT`.
+3. Stripe → Developers → Webhooks → Add endpoint:
+   `https://zhkgsbbrxcrbwriztoxx.supabase.co/functions/v1/stripe-webhook`,
+   händelsen `checkout.session.completed`. Lägg dess signing secret som
+   `STRIPE_WEBHOOK_SECRET` bland Supabase-hemligheterna.
+4. Testa i Stripes testläge med kortet 4242 4242 4242 4242 innan live.
+5. Köp går bara i webbversionen (`platform.id === 'web'`); itch- och
+   Poki-byggen visar "kommer snart", eftersom portalerna har egna regler för
+   betalning.
+
+Köpvillkor och ångerrätt: ett digitalt köp levereras direkt. Skriv en rad om
+det på Checkout-sidan (Stripe → Settings → Branding/Terms) innan live.
+
 # E-postkoppling av kontot
 
 Ett anonymt konto kan kopplas till en e-postadress i menyn (Snigelpost →
